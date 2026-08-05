@@ -5,7 +5,13 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useQuranAudio } from '@/audio/AudioProvider';
-import { SYNCHRONIZED_TIMINGS } from '@/audio/timings';
+import { usePlaybackLibrary } from '@/audio/PlaybackLibraryProvider';
+import { playWithUnavailableFeedback } from '@/audio/playbackFeedback';
+import {
+  DEFAULT_RECITER_ID,
+  isRecitationSelectionActive,
+  reciterById,
+} from '@/audio/reciter';
 import { makeAyahTarget, makeSurahTarget } from '@/bookmarks/bookmarks';
 import { useBookmarks } from '@/bookmarks/BookmarksProvider';
 import { Atmosphere } from '@/components/Atmosphere';
@@ -13,8 +19,10 @@ import { AppSymbol } from '@/components/AppSymbol';
 import { IconButton } from '@/components/IconButton';
 import { AL_FATIHA_FALLBACK, type QuranChapter } from '@/data/alFatiha';
 import { chapterByNumber } from '@/data/chapters';
+import { useReadingHistory } from '@/reader/ReadingHistoryProvider';
 import { useReaderSettings } from '@/reader/ReaderSettingsProvider';
 import { loadChapter } from '@/services/quran';
+import { useAppSettings } from '@/settings/AppSettingsProvider';
 import { useAppPalette } from '@/theme/useAppPalette';
 import { radius } from '@/theme/tokens';
 
@@ -39,6 +47,14 @@ export default function SurahScreen() {
   );
   const [error, setError] = useState<string>();
   const audio = useQuranAudio();
+  const { settings } = useAppSettings();
+  const selectedReciter = reciterById(settings.reciterId) ?? reciterById(DEFAULT_RECITER_ID)!;
+  const selectedRecitationActive = isRecitationSelectionActive(
+    audio.chapter?.number,
+    audio.reciter.id,
+    number,
+    selectedReciter.id,
+  );
   const {
     canDecreaseFont,
     canIncreaseFont,
@@ -46,7 +62,9 @@ export default function SurahScreen() {
     fontScale,
     increaseFont,
   } = useReaderSettings();
+  const { recordPosition } = useReadingHistory();
   const { isBookmarked, toggleBookmark } = useBookmarks();
+  const { enqueueRange } = usePlaybackLibrary();
   const scrollRef = useRef<ScrollView>(null);
   const ayahListOffset = useRef<number | undefined>(undefined);
   const ayahOffsets = useRef(new Map<number, number>());
@@ -77,6 +95,14 @@ export default function SurahScreen() {
     ayahOffsets.current.clear();
     lastFollowedAyah.current = undefined;
   }, [number]);
+
+  useEffect(() => {
+    if (!chapter) return;
+    const initialAyah = Number.isInteger(targetAyah) && targetAyah >= 1 && targetAyah <= chapter.ayahs.length
+      ? targetAyah
+      : 1;
+    recordPosition(number, initialAyah);
+  }, [chapter, number, recordPosition, targetAyah]);
 
   useEffect(() => {
     const activeAyah = audio.activeAyah;
@@ -123,8 +149,6 @@ export default function SurahScreen() {
 
   const surahTarget = makeSurahTarget(number);
   const surahBookmarked = isBookmarked(surahTarget.key);
-  const chapterTimingStatus = SYNCHRONIZED_TIMINGS[number]?.[0]?.reviewStatus ?? 'unavailable';
-
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <Atmosphere />
@@ -143,10 +167,10 @@ export default function SurahScreen() {
             onPress={() => toggleBookmark(surahTarget)}
           />
           <IconButton
-            name={audio.chapter?.number === number && audio.status.playing ? 'pause' : 'play'}
-            label={audio.chapter?.number === number && audio.status.playing ? 'Pause recitation' : 'Play recitation'}
+            name={selectedRecitationActive && audio.status.playing ? 'pause' : 'play'}
+            label={selectedRecitationActive && audio.status.playing ? 'Pause recitation' : 'Play recitation'}
             onPress={() => {
-              if (audio.chapter?.number === number) audio.toggle();
+              if (selectedRecitationActive) audio.toggle();
               else audio.playChapter(metadata);
             }}
           />
@@ -161,6 +185,17 @@ export default function SurahScreen() {
         ]}
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
+        onMomentumScrollEnd={(event) => {
+          if (!chapter || ayahListOffset.current === undefined) return;
+          const readingLine = event.nativeEvent.contentOffset.y + 120 - ayahListOffset.current;
+          let visibleAyah = chapter.ayahs[0];
+          for (const ayah of chapter.ayahs) {
+            const offset = ayahOffsets.current.get(ayah.number);
+            if (offset === undefined || offset > readingLine) break;
+            visibleAyah = ayah;
+          }
+          if (visibleAyah) recordPosition(number, visibleAyah.number);
+        }}
       >
         <View style={styles.content}>
           <View style={styles.surahHeader}>
@@ -175,16 +210,6 @@ export default function SurahScreen() {
               {metadata.ayahCount} ayahs · {metadata.revelationType}
             </Text>
             <View style={styles.readerToolbar}>
-              <View style={[styles.syncPill, { backgroundColor: colors.primarySoft }]}>
-                <AppSymbol name="waveform" size={13} tintColor={colors.primary} />
-                <Text style={[styles.syncPillText, { color: colors.primary }]}>
-                  {chapterTimingStatus === 'verified'
-                    ? 'Verified sync'
-                    : chapterTimingStatus === 'machineAligned'
-                      ? 'Beta Ayah sync'
-                      : 'Sync under review'}
-                </Text>
-              </View>
               <View style={[styles.fontControls, { borderColor: colors.border }]}>
                 <Pressable
                   disabled={!canDecreaseFont}
@@ -317,28 +342,12 @@ export default function SurahScreen() {
                     ]}
                   >
                     <View style={styles.ayahTopline}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={
-                          bookmarked
-                            ? `Remove bookmark for Ayah ${ayah.number}`
-                            : `Bookmark Ayah ${ayah.number}`
-                        }
-                        accessibilityState={{ selected: bookmarked }}
-                        hitSlop={8}
-                        onPress={() => {
-                          void Haptics.notificationAsync(
-                            bookmarked
-                              ? Haptics.NotificationFeedbackType.Warning
-                              : Haptics.NotificationFeedbackType.Success,
-                          );
-                          toggleBookmark(ayahTarget);
-                        }}
+                      <View
                         style={[
                           styles.ayahNumber,
                           {
                             borderColor: colors.gold,
-                            backgroundColor: bookmarked ? colors.goldSoft : 'transparent',
+                            backgroundColor: 'transparent',
                           },
                         ]}
                       >
@@ -350,16 +359,18 @@ export default function SurahScreen() {
                         >
                           {toArabicIndic(ayah.number)}
                         </Text>
-                      </Pressable>
+                      </View>
                       <View style={styles.ayahMetaGroup}>
-                        {audio.chapter?.number === number && audio.timingStatus !== 'unavailable' ? (
+                        {metadata ? (
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel={`Play from Ayah ${ayah.number}`}
                             hitSlop={8}
                             onPress={() => {
                               void Haptics.selectionAsync();
-                              void audio.seekToAyah(ayah.number);
+                              void playWithUnavailableFeedback(
+                                () => audio.playFromAyah(metadata, ayah.number),
+                              );
                             }}
                             style={styles.ayahAudioButton}
                           >
@@ -370,9 +381,62 @@ export default function SurahScreen() {
                             />
                           </Pressable>
                         ) : null}
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add Ayah ${ayah.number} to queue`}
+                          hitSlop={8}
+                          onPress={() => {
+                            enqueueRange(number, ayah.number, ayah.number);
+                            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                          }}
+                          style={styles.ayahAudioButton}
+                        >
+                          <AppSymbol name="queue" size={14} tintColor={colors.textFaint} />
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add Ayah ${ayah.number} to playlist`}
+                          hitSlop={8}
+                          onPress={() => router.push({
+                            pathname: '/add-to-playlist',
+                            params: { surah: String(number), start: String(ayah.number), end: String(ayah.number) },
+                          })}
+                          style={styles.ayahAudioButton}
+                        >
+                          <AppSymbol name="more" size={15} tintColor={colors.textFaint} />
+                        </Pressable>
                         {startsBoundary ? (
                           <Text style={[styles.ayahMeta, { color: colors.textFaint }]}>Juz {ayah.juz} · Page {ayah.page}</Text>
                         ) : null}
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={bookmarked
+                            ? `Remove bookmark for Ayah ${ayah.number}`
+                            : `Bookmark Ayah ${ayah.number}`}
+                          accessibilityState={{ selected: bookmarked }}
+                          hitSlop={6}
+                          onPress={() => {
+                            void Haptics.notificationAsync(
+                              bookmarked
+                                ? Haptics.NotificationFeedbackType.Warning
+                                : Haptics.NotificationFeedbackType.Success,
+                            );
+                            toggleBookmark(ayahTarget);
+                          }}
+                          style={[
+                            styles.ayahBookmarkButton,
+                            { backgroundColor: bookmarked ? colors.goldSoft : 'transparent' },
+                          ]}
+                        >
+                          <AppSymbol
+                            name={bookmarked ? 'bookmarkFilled' : 'bookmark'}
+                            size={13}
+                            tintColor={bookmarked ? colors.gold : colors.textMuted}
+                          />
+                          <Text style={[styles.ayahBookmarkLabel, { color: bookmarked ? colors.gold : colors.textMuted }]}>
+                            {bookmarked ? 'Saved' : 'Bookmark'}
+                          </Text>
+                        </Pressable>
                       </View>
                     </View>
                     <Text
@@ -445,17 +509,8 @@ const styles = StyleSheet.create({
     marginTop: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
   },
-  syncPill: {
-    minHeight: 34,
-    borderRadius: 17,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  syncPillText: { fontSize: 10, lineHeight: 14, fontWeight: '700' },
   fontControls: {
     height: 36,
     borderWidth: StyleSheet.hairlineWidth,
@@ -498,7 +553,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 15,
   },
-  ayahTopline: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  ayahTopline: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   ayahNumber: {
     width: 30,
     height: 30,
@@ -508,9 +563,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ayahNumberText: { fontSize: 12, fontWeight: '500', fontVariant: ['tabular-nums'] },
-  ayahMetaGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ayahMetaGroup: { flex: 1, marginStart: 8, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
   ayahAudioButton: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   ayahMeta: { fontSize: 10, fontWeight: '500' },
+  ayahBookmarkButton: { minHeight: 30, borderRadius: 15, paddingHorizontal: 9, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  ayahBookmarkLabel: { fontSize: 10, lineHeight: 14, fontWeight: '600' },
   ayahArabic: {
     fontFamily: 'AmiriQuran_400Regular',
     fontSize: 34,

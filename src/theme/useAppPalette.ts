@@ -1,7 +1,6 @@
-import { useColorScheme } from 'react-native';
-
+import { useAppSettings } from '@/settings/AppSettingsProvider';
 import { palette } from './colors';
 
 export function useAppPalette() {
-  return useColorScheme() === 'dark' ? palette.dark : palette.light;
+  return useAppSettings().colorScheme === 'dark' ? palette.dark : palette.light;
 }

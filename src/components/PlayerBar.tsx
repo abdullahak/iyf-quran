@@ -23,6 +23,7 @@ export function PlayerBar({ embedded = false, compact = false, bottomOffset = 88
     chapter,
     nextChapter,
     previousChapter,
+    reciter,
     status,
     toggle,
   } = useQuranAudio();
@@ -50,7 +51,7 @@ export function PlayerBar({ embedded = false, compact = false, bottomOffset = 88
           {chapter.arabicName.replace(/^سُورَةُ\s*/, '')}
         </Text>
         <Text style={[styles.meta, { color: colors.textMuted }]} numberOfLines={1}>
-          {chapter.englishName}{compact ? '' : ' · Muhammad Al-Faqih'}
+          {chapter.englishName}{compact ? '' : ` · ${reciter.name}`}
         </Text>
       </Pressable>
       <Pressable

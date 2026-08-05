@@ -13,6 +13,66 @@ export type OfflineAudioRecord = {
   verifiedAt: string;
 };
 
+export type OfflineAudioAction = 'cancel' | 'remove' | 'select';
+
+export function canStartOfflineDownload(selectedCount: number, batchActive: boolean): boolean {
+  return selectedCount > 0 && !batchActive;
+}
+
+export function offlineDownloadsAvailable(platform: string, supportsOffline: boolean): boolean {
+  return platform !== 'web' && supportsOffline;
+}
+
+export function claimOfflineDownloads(
+  queued: Set<number>,
+  surahs: readonly number[],
+): number[] {
+  return Array.from(new Set(surahs))
+    .sort((a, b) => a - b)
+    .filter((surah) => {
+      if (queued.has(surah)) return false;
+      queued.add(surah);
+      return true;
+    });
+}
+
+export function releaseOfflineDownloads(queued: Set<number>, surahs: readonly number[]): void {
+  surahs.forEach((surah) => queued.delete(surah));
+}
+
+export function consumeCancelledDownloads(
+  cancelled: Set<number>,
+  surahs: readonly number[],
+): number[] {
+  return surahs.filter((surah) => cancelled.delete(surah));
+}
+
+export function markOfflineCancellation(
+  queued: ReadonlySet<number>,
+  cancelled: Set<number>,
+  surah: number,
+): boolean {
+  if (!queued.has(surah)) {
+    cancelled.delete(surah);
+    return false;
+  }
+  cancelled.add(surah);
+  return true;
+}
+
+export function shouldDeletePromotedDownload(promoted: boolean, published: boolean): boolean {
+  return promoted && !published;
+}
+
+export function offlineAudioAction(
+  downloaded: boolean,
+  progress: number | undefined,
+): OfflineAudioAction {
+  if (downloaded) return 'remove';
+  if (progress !== undefined) return 'cancel';
+  return 'select';
+}
+
 export function offlineAudioUrl(surah: number): string {
   if (!Number.isInteger(surah) || surah < 1 || surah > 114) {
     throw new RangeError('Surah number must be between 1 and 114.');

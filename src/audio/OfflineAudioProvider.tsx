@@ -4,8 +4,13 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import {
   OFFLINE_AUDIO_STORAGE_KEY,
+  claimOfflineDownloads,
+  consumeCancelledDownloads,
+  markOfflineCancellation,
   offlineAudioUrl,
   parseOfflineAudioRecords,
+  releaseOfflineDownloads,
+  shouldDeletePromotedDownload,
   type OfflineAudioRecord,
 } from './offlineAudio';
 import { sha256File } from './fileIntegrity';
@@ -18,6 +23,7 @@ type OfflineAudioContextValue = {
   progress: Readonly<Partial<Record<number, number>>>;
   errors: Readonly<Partial<Record<number, string>>>;
   downloadSurahs: (surahs: readonly number[]) => Promise<void>;
+  cancelDownload: (surah: number) => Promise<void>;
   removeDownload: (surah: number) => Promise<void>;
   localUri: (surah: number) => string | undefined;
 };
@@ -45,6 +51,12 @@ export function OfflineAudioProvider({ children }: { children: React.ReactNode }
   const operationQueueRef = useRef(Promise.resolve());
   const persistenceQueueRef = useRef(Promise.resolve());
   const restorePromiseRef = useRef(Promise.resolve());
+  const activeDownloadsRef = useRef(new Map<
+    number,
+    ReturnType<typeof FileSystem.createDownloadResumable>
+  >());
+  const queuedDownloadsRef = useRef(new Set<number>());
+  const cancelledDownloadsRef = useRef(new Set<number>());
 
   const commitRecords = useCallback(async (next: Partial<Record<number, OfflineAudioRecord>>) => {
     const serialized = JSON.stringify(Object.values(next).filter(Boolean));
@@ -69,13 +81,16 @@ export function OfflineAudioProvider({ children }: { children: React.ReactNode }
         await Promise.all(
           directoryEntries
             .filter((entry) => entry.endsWith('.part'))
-            .map((entry) => FileSystem.deleteAsync(`${AUDIO_DIRECTORY}${entry}`, { idempotent: true })),
+            .map((entry) => FileSystem
+              .deleteAsync(`${AUDIO_DIRECTORY}${entry}`, { idempotent: true })
+              .catch(() => undefined)),
         );
       }
       await Promise.all(Object.values(parsed).filter(Boolean).map(async (record) => {
         if (!record) return;
         if (!AUDIO_DIRECTORY || record.uri !== destinationUri(record.surah)) return;
-        const info = await FileSystem.getInfoAsync(record.uri);
+        const info = await FileSystem.getInfoAsync(record.uri).catch(() => undefined);
+        if (!info) return;
         if (info.exists && !info.isDirectory && info.size === record.bytes) valid[record.surah] = record;
       }));
       if (AUDIO_DIRECTORY) {
@@ -85,7 +100,7 @@ export function OfflineAudioProvider({ children }: { children: React.ReactNode }
             .filter((entry) => entry.endsWith('.mp3'))
             .map((entry) => `${AUDIO_DIRECTORY}${entry}`)
             .filter((uri) => !validUris.has(uri))
-            .map((uri) => FileSystem.deleteAsync(uri, { idempotent: true })),
+            .map((uri) => FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => undefined)),
         );
       }
       if (!active) return;
@@ -115,8 +130,10 @@ export function OfflineAudioProvider({ children }: { children: React.ReactNode }
     setErrors((current) => ({ ...current, [surah]: undefined }));
     setProgress((current) => ({ ...current, [surah]: 0 }));
     let promoted = false;
+    let published = false;
 
     try {
+      if (cancelledDownloadsRef.current.has(surah)) throw new Error('Download cancelled.');
       const task = FileSystem.createDownloadResumable(
         offlineAudioUrl(surah),
         temporary,
@@ -131,7 +148,9 @@ export function OfflineAudioProvider({ children }: { children: React.ReactNode }
           }));
         },
       );
+      activeDownloadsRef.current.set(surah, task);
       const result = await task.downloadAsync();
+      if (cancelledDownloadsRef.current.has(surah)) throw new Error('Download cancelled.');
       if (!result || result.status < 200 || result.status >= 300) {
         throw new Error('The audio server did not complete the download.');
       }
@@ -143,9 +162,11 @@ export function OfflineAudioProvider({ children }: { children: React.ReactNode }
       if (digest !== track.sha256) {
         throw new Error('The downloaded file failed its integrity check.');
       }
+      if (cancelledDownloadsRef.current.has(surah)) throw new Error('Download cancelled.');
       await FileSystem.deleteAsync(destination, { idempotent: true });
       await FileSystem.moveAsync({ from: temporary, to: destination });
       promoted = true;
+      if (cancelledDownloadsRef.current.has(surah)) throw new Error('Download cancelled.');
       const timestamp = new Date().toISOString();
       const record: OfflineAudioRecord = {
         surah,
@@ -156,56 +177,142 @@ export function OfflineAudioProvider({ children }: { children: React.ReactNode }
         verifiedAt: timestamp,
       };
       await commitRecords({ ...recordsRef.current, [surah]: record });
+      published = true;
+      if (cancelledDownloadsRef.current.has(surah)) {
+        const next = { ...recordsRef.current };
+        delete next[surah];
+        try {
+          await commitRecords(next);
+          published = false;
+        } catch (error) {
+          cancelledDownloadsRef.current.delete(surah);
+          throw error;
+        }
+        throw new Error('Download cancelled.');
+      }
       setProgress((current) => ({ ...current, [surah]: 1 }));
     } catch (error) {
-      await FileSystem.deleteAsync(temporary, { idempotent: true });
-      if (promoted) await FileSystem.deleteAsync(destination, { idempotent: true });
+      await FileSystem.deleteAsync(temporary, { idempotent: true }).catch(() => undefined);
+      if (shouldDeletePromotedDownload(promoted, published)) {
+        await FileSystem.deleteAsync(destination, { idempotent: true }).catch(() => undefined);
+      }
       throw error;
+    } finally {
+      activeDownloadsRef.current.delete(surah);
     }
   }, [commitRecords]);
 
   const downloadSurahs = useCallback((surahs: readonly number[]) => {
-    const requested = Array.from(new Set(surahs)).sort((a, b) => a - b);
+    const requested = claimOfflineDownloads(queuedDownloadsRef.current, surahs);
+    if (requested.length === 0) return Promise.resolve();
+    const clearRequestState = (targets: readonly number[]) => {
+      if (targets.length === 0) return;
+      setProgress((current) => Object.fromEntries([
+        ...Object.entries(current),
+        ...targets.map((surah) => [surah, undefined]),
+      ]));
+      setErrors((current) => Object.fromEntries([
+        ...Object.entries(current),
+        ...targets.map((surah) => [surah, undefined]),
+      ]));
+    };
+    const consumeRequestCancellations = (targets: readonly number[]) => {
+      const cancelled = consumeCancelledDownloads(cancelledDownloadsRef.current, targets);
+      clearRequestState(cancelled);
+      return new Set(cancelled);
+    };
+    setProgress((current) => {
+      const next = { ...current };
+      requested.forEach((surah) => { next[surah] = 0; });
+      return next;
+    });
     return enqueueSerial(
       operationQueueRef,
       async () => {
-        await restorePromiseRef.current;
-        const pending = requested.filter((surah) => !recordsRef.current[surah]);
-        if (pending.length === 0) return;
-        const remainingBytes = pending.reduce(
-          (total, surah) => total + recitationTrack({ number: surah }).bytes,
-          0,
-        );
-        const reserve = Math.max(DOWNLOAD_RESERVE_BYTES, Math.ceil(remainingBytes * 0.1));
-        const freeBytes = await FileSystem.getFreeDiskStorageAsync();
-        if (freeBytes < remainingBytes + reserve) {
-          const message = 'Not enough free storage for the selected Surahs.';
+        try {
+          await restorePromiseRef.current;
+          const cancelledBeforePreflight = consumeRequestCancellations(requested);
+          const completed = requested.filter(
+            (surah) => !cancelledBeforePreflight.has(surah) && recordsRef.current[surah],
+          );
+          clearRequestState(completed);
+          let pending = requested.filter(
+            (surah) => !cancelledBeforePreflight.has(surah) && !recordsRef.current[surah],
+          );
+          if (pending.length === 0) return;
+          const freeBytes = await FileSystem.getFreeDiskStorageAsync();
+          const cancelledDuringPreflight = consumeRequestCancellations(pending);
+          pending = pending.filter((surah) => !cancelledDuringPreflight.has(surah));
+          if (pending.length === 0) return;
+          const remainingBytes = pending.reduce(
+            (total, surah) => total + recitationTrack({ number: surah }).bytes,
+            0,
+          );
+          const reserve = Math.max(DOWNLOAD_RESERVE_BYTES, Math.ceil(remainingBytes * 0.1));
+          if (freeBytes < remainingBytes + reserve) {
+            const message = 'Not enough free storage for the selected Surahs.';
+            setErrors((current) => Object.fromEntries([
+              ...Object.entries(current),
+              ...pending.map((surah) => [surah, message]),
+            ]));
+            setProgress((current) => Object.fromEntries([
+              ...Object.entries(current),
+              ...pending.map((surah) => [surah, undefined]),
+            ]));
+            return;
+          }
+
+          for (const surah of pending) {
+            try {
+              await downloadOne(surah);
+            } catch (error) {
+              if (cancelledDownloadsRef.current.delete(surah)) {
+                setProgress((current) => ({ ...current, [surah]: undefined }));
+                setErrors((current) => ({ ...current, [surah]: undefined }));
+                continue;
+              }
+              const message = error instanceof Error ? error.message : 'Download failed.';
+              setErrors((current) => ({ ...current, [surah]: message }));
+              setProgress((current) => ({ ...current, [surah]: undefined }));
+            }
+          }
+        } catch (error) {
+          const cancelled = consumeRequestCancellations(requested);
+          const failed = requested.filter(
+            (surah) => !cancelled.has(surah) && !recordsRef.current[surah],
+          );
+          const message = error instanceof Error ? error.message : 'Download failed.';
           setErrors((current) => Object.fromEntries([
             ...Object.entries(current),
-            ...pending.map((surah) => [surah, message]),
+            ...failed.map((surah) => [surah, message]),
           ]));
-          return;
+          setProgress((current) => Object.fromEntries([
+            ...Object.entries(current),
+            ...requested.map((surah) => [surah, undefined]),
+          ]));
+        } finally {
+          requested.forEach((surah) => cancelledDownloadsRef.current.delete(surah));
+          releaseOfflineDownloads(queuedDownloadsRef.current, requested);
         }
-
-        for (const surah of pending) {
-          try {
-            await downloadOne(surah);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : 'Download failed.';
-            setErrors((current) => ({ ...current, [surah]: message }));
-            setProgress((current) => ({ ...current, [surah]: undefined }));
-          }
-        }
-      },
-      (error) => {
-        const message = error instanceof Error ? error.message : 'Download failed.';
-        setErrors((current) => Object.fromEntries([
-          ...Object.entries(current),
-          ...requested.map((surah) => [surah, message]),
-        ]));
       },
     );
   }, [downloadOne]);
+
+  const cancelDownload = useCallback(async (surah: number) => {
+    const owned = markOfflineCancellation(
+      queuedDownloadsRef.current,
+      cancelledDownloadsRef.current,
+      surah,
+    );
+    const activeDownload = owned ? activeDownloadsRef.current.get(surah) : undefined;
+    if (activeDownload) await activeDownload.cancelAsync().catch(() => undefined);
+    if (AUDIO_DIRECTORY) {
+      await FileSystem.deleteAsync(`${destinationUri(surah)}.part`, { idempotent: true })
+        .catch(() => undefined);
+    }
+    setProgress((current) => ({ ...current, [surah]: undefined }));
+    setErrors((current) => ({ ...current, [surah]: undefined }));
+  }, []);
 
   const removeDownload = useCallback((surah: number) => {
     return enqueueSerial(
@@ -222,6 +329,7 @@ export function OfflineAudioProvider({ children }: { children: React.ReactNode }
         setErrors((current) => ({ ...current, [surah]: undefined }));
       },
       (error) => {
+        setProgress((current) => ({ ...current, [surah]: undefined }));
         setErrors((current) => ({
           ...current,
           [surah]: error instanceof Error ? error.message : 'Unable to remove download.',
@@ -236,9 +344,10 @@ export function OfflineAudioProvider({ children }: { children: React.ReactNode }
     progress,
     errors,
     downloadSurahs,
+    cancelDownload,
     removeDownload,
     localUri: (surah) => records[surah]?.uri,
-  }), [downloadSurahs, errors, progress, ready, records, removeDownload]);
+  }), [cancelDownload, downloadSurahs, errors, progress, ready, records, removeDownload]);
 
   return <OfflineAudioContext.Provider value={value}>{children}</OfflineAudioContext.Provider>;
 }

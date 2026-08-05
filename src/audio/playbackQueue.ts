@@ -9,6 +9,25 @@ export function finishTransition(handled: boolean, didJustFinish: boolean) {
   return { advance: true, handled: true };
 }
 
+export function nextQueueIndex(
+  length: number,
+  currentIndex: number,
+  direction: -1 | 1,
+): number | undefined {
+  if (!Number.isInteger(length) || !Number.isInteger(currentIndex) || length <= 0) return undefined;
+  const candidate = currentIndex + direction;
+  return candidate >= 0 && candidate < length ? candidate : undefined;
+}
+
+export function queueEntryStartTime(
+  entry: { startAyah: number; endAyah: number },
+  ayahCount: number,
+  timingStart?: number,
+): number | undefined {
+  if (entry.startAyah === 1 && entry.endAyah === ayahCount) return 0;
+  return Number.isFinite(timingStart) ? timingStart : undefined;
+}
+
 export function formatPlaybackTime(value: number): string {
   if (!Number.isFinite(value) || value < 0) return '0:00';
   const totalSeconds = Math.floor(value);

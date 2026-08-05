@@ -70,7 +70,7 @@ export function ChapterRow({
       >
         {chapter.arabicName.replace(/^سُورَةُ\s*/, '')}
       </Text>
-      {onPress ? (
+      {action === 'play' ? (
         <View style={styles.play}>
           <AppSymbol
             name={playing ? 'pause' : 'play'}

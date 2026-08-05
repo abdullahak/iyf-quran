@@ -5,29 +5,45 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useQuranAudio } from '@/audio/AudioProvider';
 import { useOfflineAudio } from '@/audio/OfflineAudioProvider';
-import { MUHAMMAD_AL_FAQIH, recitationTrack } from '@/audio/reciter';
+import {
+  canStartOfflineDownload,
+  offlineAudioAction,
+  offlineDownloadsAvailable,
+} from '@/audio/offlineAudio';
+import { isRecitationSelectionActive, recitationTrack, reciterById } from '@/audio/reciter';
 import { Atmosphere } from '@/components/Atmosphere';
 import { AppSymbol } from '@/components/AppSymbol';
 import { ChapterRow } from '@/components/ChapterRow';
 import { CHAPTERS } from '@/data/chapters';
+import { useAppSettings } from '@/settings/AppSettingsProvider';
 import { useAppPalette } from '@/theme/useAppPalette';
 
 export default function ListenScreen() {
   const colors = useAppPalette();
-  const { chapter: activeChapter, status, playChapter, toggle } = useQuranAudio();
-  const { downloadSurahs, errors, progress, records, removeDownload } = useOfflineAudio();
+  const { settings } = useAppSettings();
+  const selectedReciter = reciterById(settings.reciterId)!;
+  const { chapter: activeChapter, reciter: activeReciter, status, playChapter, toggle } = useQuranAudio();
+  const { cancelDownload, downloadSurahs, errors, progress, records, removeDownload } = useOfflineAudio();
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const downloadsAvailable = Platform.OS !== 'web';
-  const alFatihaPlaying = activeChapter?.number === 1 && status.playing;
+  const [batchDownloading, setBatchDownloading] = useState(false);
+  const downloadsAvailable = offlineDownloadsAvailable(Platform.OS, selectedReciter.supportsOffline);
+  const alFatihaActive = isRecitationSelectionActive(
+    activeChapter?.number,
+    activeReciter.id,
+    1,
+    selectedReciter.id,
+  );
+  const alFatihaPlaying = alFatihaActive && status.playing;
   const selectedNumbers = Array.from(selected).sort((a, b) => a - b);
   const selectedBytes = selectedNumbers.reduce(
     (total, surah) => total + recitationTrack({ number: surah }).bytes,
     0,
   );
+  const canStartSelection = canStartOfflineDownload(selectedNumbers.length, batchDownloading);
 
   const toggleAlFatiha = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (activeChapter?.number === 1) toggle();
+    if (alFatihaActive) toggle();
     else playChapter(CHAPTERS[0]);
   };
 
@@ -38,10 +54,17 @@ export default function ListenScreen() {
         data={CHAPTERS}
         keyExtractor={(chapter) => String(chapter.number)}
         renderItem={({ item }) => {
-          const playing = activeChapter?.number === item.number && status.playing;
+          const active = isRecitationSelectionActive(
+            activeChapter?.number,
+            activeReciter.id,
+            item.number,
+            selectedReciter.id,
+          );
+          const playing = active && status.playing;
           const downloaded = records[item.number];
           const downloadProgress = progress[item.number];
           const downloading = !downloaded && downloadProgress !== undefined;
+          const downloadAction = offlineAudioAction(Boolean(downloaded), downloadProgress);
           const isSelected = selected.has(item.number);
           return (
             <ChapterRow
@@ -56,24 +79,29 @@ export default function ListenScreen() {
                     ? `Downloading ${Math.round((downloadProgress ?? 0) * 100)}%`
                     : `Surah ${item.number} · ${item.ayahCount} ayahs`}
               onPress={() => {
-                if (activeChapter?.number === item.number) toggle();
+                if (active) toggle();
                 else playChapter(item);
               }}
               trailing={downloadsAvailable ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={downloaded
-                    ? `Remove downloaded Surah ${item.englishName}`
-                    : isSelected
-                      ? `Remove Surah ${item.englishName} from download selection`
-                      : `Select Surah ${item.englishName} to download`}
-                  accessibilityState={{ selected: isSelected || Boolean(downloaded), disabled: downloading }}
-                  disabled={downloading}
+                  accessibilityLabel={downloadAction === 'cancel'
+                    ? `Cancel download of Surah ${item.englishName}`
+                    : downloadAction === 'remove'
+                      ? `Remove downloaded Surah ${item.englishName}`
+                      : isSelected
+                        ? `Remove Surah ${item.englishName} from download selection`
+                        : `Select Surah ${item.englishName} to download`}
+                  accessibilityState={{ selected: isSelected || Boolean(downloaded) }}
                   hitSlop={6}
                   onPress={(event) => {
                     event.stopPropagation();
                     void Haptics.selectionAsync();
-                    if (downloaded) {
+                    if (downloadAction === 'cancel') {
+                      void cancelDownload(item.number);
+                      return;
+                    }
+                    if (downloadAction === 'remove') {
                       void removeDownload(item.number);
                       return;
                     }
@@ -84,12 +112,12 @@ export default function ListenScreen() {
                       return next;
                     });
                   }}
-                  style={({ pressed }) => [styles.downloadAction, { opacity: downloading ? 0.45 : pressed ? 0.55 : 1 }]}
+                  style={({ pressed }) => [styles.downloadAction, { opacity: pressed ? 0.55 : 1 }]}
                 >
                   <AppSymbol
-                    name={downloaded ? 'trash' : isSelected ? 'downloaded' : 'download'}
+                    name={downloadAction === 'cancel' ? 'close' : downloadAction === 'remove' ? 'trash' : isSelected ? 'downloaded' : 'download'}
                     size={19}
-                    tintColor={downloaded ? colors.danger : isSelected ? colors.primary : colors.textMuted}
+                    tintColor={downloadAction === 'cancel' || downloadAction === 'remove' ? colors.danger : isSelected ? colors.primary : colors.textMuted}
                   />
                 </Pressable>
               ) : undefined}
@@ -112,9 +140,9 @@ export default function ListenScreen() {
                   accessibilityLanguage="ar"
                   style={[styles.reciterArabic, { color: colors.text }]}
                 >
-                  مُحَمَّد ٱلْفَقِيه
+                  {selectedReciter.arabicName}
                 </Text>
-                <Text style={[styles.reciterName, { color: colors.text }]}>{MUHAMMAD_AL_FAQIH.name}</Text>
+                <Text style={[styles.reciterName, { color: colors.text }]}>{selectedReciter.name}</Text>
                 <Text style={[styles.reciterMeta, { color: colors.textMuted }]}>Hafs ‘an ‘Asim · 114 surahs</Text>
               </View>
               <Pressable
@@ -146,25 +174,31 @@ export default function ListenScreen() {
                   <Text style={[styles.downloadMeta, { color: colors.textMuted }]}>Select individual Surahs. Each download is verified for offline use; iOS may remove it when storage is low.</Text>
                 </View>
                 <Pressable
-                  disabled={selectedNumbers.length === 0}
+                  disabled={!canStartSelection}
                   onPress={() => {
                     const queued = selectedNumbers;
+                    setBatchDownloading(true);
                     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    void downloadSurahs(queued).then(() => setSelected(new Set()));
+                    void downloadSurahs(queued).finally(() => {
+                      setBatchDownloading(false);
+                      setSelected(new Set());
+                    });
                   }}
                   style={({ pressed }) => [
                     styles.downloadSelected,
                     {
-                      backgroundColor: selectedNumbers.length ? colors.primary : colors.surfaceMuted,
+                      backgroundColor: canStartSelection ? colors.primary : colors.surfaceMuted,
                       opacity: pressed ? 0.72 : 1,
                     },
                   ]}
                 >
-                  <AppSymbol name="download" size={16} tintColor={selectedNumbers.length ? colors.onPrimary : colors.textFaint} />
-                  <Text style={[styles.downloadSelectedText, { color: selectedNumbers.length ? colors.onPrimary : colors.textFaint }]}>
-                    {selectedNumbers.length
-                      ? `Download ${selectedNumbers.length} · ${(selectedBytes / 1_000_000).toFixed(0)} MB`
-                      : 'Select Surahs'}
+                  <AppSymbol name="download" size={16} tintColor={canStartSelection ? colors.onPrimary : colors.textFaint} />
+                  <Text style={[styles.downloadSelectedText, { color: canStartSelection ? colors.onPrimary : colors.textFaint }]}>
+                    {batchDownloading
+                      ? 'Downloading selection…'
+                      : selectedNumbers.length
+                        ? `Download ${selectedNumbers.length} · ${(selectedBytes / 1_000_000).toFixed(0)} MB`
+                        : 'Select Surahs'}
                   </Text>
                 </Pressable>
               </View>

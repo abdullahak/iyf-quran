@@ -19,7 +19,7 @@
     "audio:align:elevenlabs": "python3 scripts/align_with_elevenlabs.py",
     "audio:analyze-pilot": "python3 scripts/analyze_alignment_pilot.py",
     "audio:analyze-silence": "python3 scripts/analyze_silence_agreement.py",
-    "audio:test-alignment": "python3 -m unittest scripts/test_align_with_elevenlabs.py scripts/test_analyze_alignment_pilot.py scripts/test_analyze_silence_agreement.py",
+    "audio:test-alignment": "python3 -m unittest discover -s scripts -p 'test_*.py'",
     "audio:validate": "python3 scripts/validate_timing_index.py",
     "audio:review": "python3 scripts/review_timings.py",
     "audio:publish": "python3 scripts/publish_timing_index.py",

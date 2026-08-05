@@ -1,9 +1,17 @@
 import { requireOptionalNativeModule } from 'expo';
 
+import type { RemoteCommandConfiguration } from './remoteCommands';
+
 type HeadsetCommand = 'next' | 'previous';
 type HeadsetCommandEvent = { command: HeadsetCommand };
 type HeadsetControlsNativeModule = {
-  configure: (active: boolean, canPrevious: boolean, canNext: boolean) => void;
+  configure: (
+    active: boolean,
+    canPrevious: boolean,
+    canNext: boolean,
+    queueIndex: number,
+    queueCount: number,
+  ) => void;
   addListener: (
     eventName: 'onCommand',
     listener: (event: HeadsetCommandEvent) => void,
@@ -12,12 +20,14 @@ type HeadsetControlsNativeModule = {
 
 const nativeModule = requireOptionalNativeModule<HeadsetControlsNativeModule>('HeadsetControls');
 
-export function configureHeadsetControls(
-  active: boolean,
-  canPrevious: boolean,
-  canNext: boolean,
-): void {
-  nativeModule?.configure(active, canPrevious, canNext);
+export function configureHeadsetControls(config: RemoteCommandConfiguration): void {
+  nativeModule?.configure(
+    config.active,
+    config.canPrevious,
+    config.canNext,
+    config.queueIndex,
+    config.queueCount,
+  );
 }
 
 export function addHeadsetCommandListener(

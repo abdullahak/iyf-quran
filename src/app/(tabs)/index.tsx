@@ -3,11 +3,14 @@ import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { usePlaybackLibrary } from '@/audio/PlaybackLibraryProvider';
 import { useBookmarks } from '@/bookmarks/BookmarksProvider';
 import { Atmosphere } from '@/components/Atmosphere';
 import { AppSymbol } from '@/components/AppSymbol';
-import { AL_FATIHA_FALLBACK } from '@/data/alFatiha';
-import { CHAPTERS } from '@/data/chapters';
+import { IconButton } from '@/components/IconButton';
+import { chapterByNumber } from '@/data/chapters';
+import { useReadingHistory } from '@/reader/ReadingHistoryProvider';
+import { useAppSettings } from '@/settings/AppSettingsProvider';
 import { useAppPalette } from '@/theme/useAppPalette';
 import { radius, shadow } from '@/theme/tokens';
 
@@ -15,12 +18,9 @@ export default function HomeScreen() {
   const colors = useAppPalette();
   const router = useRouter();
   const { bookmarks } = useBookmarks();
-  const alFatiha = CHAPTERS[0];
-
-  const openReader = () => {
-    void Haptics.selectionAsync();
-    router.push({ pathname: '/surah/[id]', params: { id: '1' } });
-  };
+  const { playlists } = usePlaybackLibrary();
+  const { recentPages } = useReadingHistory();
+  const { settings } = useAppSettings();
 
   const openLibrary = () => {
     void Haptics.selectionAsync();
@@ -41,40 +41,109 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.content}>
-          <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>IYF Quran</Text>
+          <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Quran</Text>
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Begin reading Surah Al-Faatiha"
-            onPress={openReader}
-            style={({ pressed }) => [
-              styles.continuePanel,
-              shadow.subtle,
-              {
-                backgroundColor: pressed ? colors.primarySoft : colors.surface,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <Text style={[styles.continueLabel, { color: colors.textMuted }]}>Begin reading</Text>
-            <Text
-              accessibilityLanguage="ar"
-              style={[styles.continueArabic, { color: colors.text }]}
-            >
-              {alFatiha.arabicName.replace(/^سُورَةُ\s*/, '')}
-            </Text>
-            <Text
-              accessibilityLanguage="ar"
-              numberOfLines={2}
-              style={[styles.verse, { color: colors.primary }]}
-            >
-              {AL_FATIHA_FALLBACK.ayahs[0].arabic}
-            </Text>
-            <View style={styles.continueFooter}>
-              <Text style={[styles.continueMeta, { color: colors.textMuted }]}>Al-Faatiha · 7 ayahs</Text>
-              <AppSymbol name="book" size={18} tintColor={colors.gold} />
+          <View style={styles.section}>
+            <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>Recent pages</Text>
+            {recentPages.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.recentRail}
+              >
+                {recentPages.map((recent) => {
+                  const chapter = chapterByNumber(recent.surah)!;
+                  return (
+                    <Pressable
+                      key={recent.page}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open page ${recent.page}, Surah ${chapter.englishName}, Ayah ${recent.ayah}`}
+                      onPress={() => {
+                        void Haptics.selectionAsync();
+                        if (settings.readerMode === 'mushaf') {
+                          router.push({ pathname: '/mushaf/[page]', params: { page: String(recent.page) } });
+                        } else {
+                          router.push({
+                            pathname: '/surah/[id]',
+                            params: { id: String(recent.surah), ayah: String(recent.ayah) },
+                          });
+                        }
+                      }}
+                      style={({ pressed }) => [
+                        styles.recentPage,
+                        shadow.subtle,
+                        {
+                          backgroundColor: pressed ? colors.primarySoft : colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.pageNumber, { color: colors.textMuted }]}>PAGE {recent.page}</Text>
+                      <Text accessibilityLanguage="ar" style={[styles.pageArabic, { color: colors.text }]}>
+                        {chapter.arabicName.replace(/^سُورَةُ\s*/, '')}
+                      </Text>
+                      <Text style={[styles.pageTitle, { color: colors.text }]} numberOfLines={1}>{chapter.englishName}</Text>
+                      <Text style={[styles.pageMeta, { color: colors.textMuted }]}>Ayah {recent.ayah}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Browse Quran to begin reading"
+                onPress={openLibrary}
+                style={({ pressed }) => [styles.emptyStateRow, { opacity: pressed ? 0.58 : 1 }]}
+              >
+                <AppSymbol name="book" size={20} tintColor={colors.primary} />
+                <View style={styles.libraryCopy}>
+                  <Text style={[styles.libraryTitle, { color: colors.text }]}>No recent pages yet</Text>
+                  <Text style={[styles.libraryMeta, { color: colors.textMuted }]}>Pages you read will return here.</Text>
+                </View>
+                <AppSymbol name="forward" size={15} tintColor={colors.textFaint} />
+              </Pressable>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeading}>
+              <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>Playlists</Text>
+              <IconButton name="add" label="Create or manage playlists" onPress={() => router.push('/playlists')} />
             </View>
-          </Pressable>
+            {playlists.length > 0 ? playlists.map((playlist, index) => (
+              <View key={playlist.id}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open playlist ${playlist.name}, ${playlist.items.length} items`}
+                  onPress={() => router.push({ pathname: '/playlist/[id]', params: { id: playlist.id } })}
+                  style={({ pressed }) => [styles.libraryRow, { backgroundColor: pressed ? colors.primarySoft : 'transparent' }]}
+                >
+                  <AppSymbol name="queue" size={19} tintColor={colors.primary} />
+                  <View style={styles.libraryCopy}>
+                    <Text style={[styles.libraryTitle, { color: colors.text }]}>{playlist.name}</Text>
+                    <Text style={[styles.libraryMeta, { color: colors.textMuted }]}>
+                      {playlist.items.length === 1 ? '1 item' : `${playlist.items.length} items`}
+                    </Text>
+                  </View>
+                </Pressable>
+                {index < playlists.length - 1 ? <View style={[styles.libraryDivider, { backgroundColor: colors.border }]} /> : null}
+              </View>
+            )) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Create a Quran playlist"
+                onPress={() => router.push('/playlists')}
+                style={({ pressed }) => [styles.emptyStateRow, { opacity: pressed ? 0.58 : 1 }]}
+              >
+                <AppSymbol name="queue" size={20} tintColor={colors.primary} />
+                <View style={styles.libraryCopy}>
+                  <Text style={[styles.libraryTitle, { color: colors.text }]}>Create your first playlist</Text>
+                  <Text style={[styles.libraryMeta, { color: colors.textMuted }]}>Group Surahs and Ayahs in your own order.</Text>
+                </View>
+                <AppSymbol name="add" size={15} tintColor={colors.textFaint} />
+              </Pressable>
+            )}
+          </View>
 
           <View style={styles.section}>
             <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>Quran Library</Text>
@@ -133,42 +202,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: -1.1,
   },
-  continuePanel: {
-    minHeight: 300,
-    marginTop: 28,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.panel,
-    paddingHorizontal: 24,
-    paddingVertical: 22,
-  },
-  continueLabel: { fontSize: 13, lineHeight: 18, fontWeight: '500' },
-  continueArabic: {
-    marginTop: 20,
-    fontFamily: 'AmiriQuran_400Regular',
-    fontSize: 42,
-    lineHeight: 60,
-    writingDirection: 'rtl',
-    textAlign: 'right',
-  },
-  verse: {
-    marginTop: 8,
-    fontFamily: 'AmiriQuran_400Regular',
-    fontSize: 27,
-    lineHeight: 48,
-    writingDirection: 'rtl',
-    textAlign: 'right',
-  },
-  continueFooter: {
-    marginTop: 'auto',
-    paddingTop: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  continueMeta: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: '500' },
-  section: { marginTop: 34 },
+  section: { marginTop: 30 },
+  sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitle: { fontSize: 22, lineHeight: 28, fontWeight: '600', letterSpacing: -0.3 },
+  recentRail: { paddingTop: 12, paddingBottom: 4, paddingEnd: 4, gap: 12 },
+  recentPage: { width: 156, minHeight: 188, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.control, padding: 15 },
+  pageNumber: { fontSize: 9, lineHeight: 13, fontWeight: '700', letterSpacing: 1 },
+  pageArabic: { marginTop: 22, fontFamily: 'AmiriQuran_400Regular', fontSize: 30, lineHeight: 46, textAlign: 'right', writingDirection: 'rtl' },
+  pageTitle: { marginTop: 'auto', fontSize: 14, lineHeight: 19, fontWeight: '600' },
+  pageMeta: { marginTop: 3, fontSize: 11, lineHeight: 15 },
+  emptyStateRow: { minHeight: 78, marginTop: 8, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
   libraryRow: {
     minHeight: 72,
     marginTop: 10,

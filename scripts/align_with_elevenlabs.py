@@ -376,7 +376,7 @@ def build_candidate(
     previous_start = -1.0
     previous_end = -1.0
     aligned: list[dict[str, Any]] = []
-    for index, (token, word) in enumerate(zip(tokens, words, strict=True), start=1):
+    for index, (token, word) in enumerate(zip(tokens, words), start=1):
         returned_text = normalize_alignment_text(str(word.get("text", "")))
         if returned_text != token["text"]:
             raise ValueError(

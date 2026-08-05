@@ -9,12 +9,20 @@ public final class HeadsetControlsModule: Module {
     Name("HeadsetControls")
     Events("onCommand")
 
-    Function("configure") { (active: Bool, canPrevious: Bool, canNext: Bool) in
+    Function("configure") { (
+      active: Bool,
+      canPrevious: Bool,
+      canNext: Bool,
+      queueIndex: Int,
+      queueCount: Int
+    ) in
       DispatchQueue.main.async {
         self.configureRemoteCommands(
           active: active,
           canPrevious: canPrevious,
-          canNext: canNext
+          canNext: canNext,
+          queueIndex: queueIndex,
+          queueCount: queueCount
         )
       }
     }
@@ -26,16 +34,19 @@ public final class HeadsetControlsModule: Module {
     }
   }
 
-  private func configureRemoteCommands(active: Bool, canPrevious: Bool, canNext: Bool) {
+  private func configureRemoteCommands(
+    active: Bool,
+    canPrevious: Bool,
+    canNext: Bool,
+    queueIndex: Int,
+    queueCount: Int
+  ) {
     guard active else {
       removeRemoteCommands()
       return
     }
 
     let commandCenter = MPRemoteCommandCenter.shared()
-    commandCenter.nextTrackCommand.isEnabled = canNext
-    commandCenter.previousTrackCommand.isEnabled = canPrevious
-
     if nextTarget == nil {
       nextTarget = commandCenter.nextTrackCommand.addTarget { [weak self] _ in
         guard let self else { return .commandFailed }
@@ -49,6 +60,15 @@ public final class HeadsetControlsModule: Module {
         self.sendEvent("onCommand", ["command": "previous"])
         return .success
       }
+    }
+    commandCenter.nextTrackCommand.isEnabled = canNext
+    commandCenter.previousTrackCommand.isEnabled = canPrevious
+
+    let nowPlayingInfoCenter = MPNowPlayingInfoCenter.default()
+    if var nowPlayingInfo = nowPlayingInfoCenter.nowPlayingInfo {
+      nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackQueueCount] = queueCount
+      nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackQueueIndex] = queueIndex
+      nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo
     }
   }
 
@@ -64,5 +84,12 @@ public final class HeadsetControlsModule: Module {
     }
     commandCenter.nextTrackCommand.isEnabled = false
     commandCenter.previousTrackCommand.isEnabled = false
+
+    let nowPlayingInfoCenter = MPNowPlayingInfoCenter.default()
+    if var nowPlayingInfo = nowPlayingInfoCenter.nowPlayingInfo {
+      nowPlayingInfo.removeValue(forKey: MPNowPlayingInfoPropertyPlaybackQueueCount)
+      nowPlayingInfo.removeValue(forKey: MPNowPlayingInfoPropertyPlaybackQueueIndex)
+      nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo.isEmpty ? nil : nowPlayingInfo
+    }
   }
 }

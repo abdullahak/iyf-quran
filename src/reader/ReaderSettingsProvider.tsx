@@ -14,6 +14,7 @@ type ReaderSettingsContextValue = {
   canIncreaseFont: boolean;
   decreaseFont: () => void;
   increaseFont: () => void;
+  setFontScale: (fontScale: number) => void;
 };
 
 const ReaderSettingsContext = createContext<ReaderSettingsContextValue | null>(null);
@@ -55,6 +56,9 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
     () => setFontScale((current) => nextReaderFontScale(current, 1)),
     [],
   );
+  const selectFontScale = useCallback((nextScale: number) => {
+    setFontScale(parseReaderFontScale(JSON.stringify(nextScale)));
+  }, []);
 
   const value = useMemo<ReaderSettingsContextValue>(
     () => ({
@@ -63,8 +67,9 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
       canIncreaseFont: fontScale < 1.45,
       decreaseFont,
       increaseFont,
+      setFontScale: selectFontScale,
     }),
-    [decreaseFont, fontScale, increaseFont],
+    [decreaseFont, fontScale, increaseFont, selectFontScale],
   );
 
   return <ReaderSettingsContext.Provider value={value}>{children}</ReaderSettingsContext.Provider>;

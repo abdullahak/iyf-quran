@@ -6,11 +6,14 @@ A modern family Quran app built with Expo development builds. IYF Quran is inspi
 
 - Native iOS-first composition with Liquid Glass controls, a mineral reading canvas, restrained paper texture, and accessible material fallbacks
 - Calm, minimalist Quran reading designed for the family of Imam Yahya
-- Uthmani Arabic text with accessible English context
-- Background recitation by Muhammad Al-Faqih
-- Ayah-by-ayah highlighting driven by verified timing manifests
-- Local Surah/Ayah bookmarks with direct return-to-reader navigation
-- Planned offline reading, saved progress, and rights-approved audio downloads
+- Canonical Uthmani Arabic text with Arabic and transliterated Surah names, without translations or English meanings
+- Background recitation by Muhammad Al-Faqih or Mishary Alafasi, with persisted 0.5×–2× pitch-corrected playback speed
+- Ayah-by-Ayah highlighting from a machine-aligned registry for 110 structurally accepted Surahs, with ordinary unsynchronized playback for blocked anomalies
+- Local Surah/Ayah bookmarks with direct return-to-reader navigation and explicit per-Ayah play, queue, and playlist actions
+- Canonical 604-page Hafs Medina reading view, fast Surah/Juz/page navigation, real recent pages, and persisted reader font sizing
+- Ordered queues and user playlists built from whole Surahs or Ayah ranges, plus page/Juz/Surah stop rules and a sleep timer
+- System/light/dark appearance settings and reciter selection
+- Per-Surah offline downloads with cancellable transfer, incremental SHA-256 verification, cache-purge reconciliation, and local-first playback
 
 ## Development
 
@@ -47,7 +50,7 @@ npm run audio:download
 npm run audio:index
 ```
 
-The app streams from MP3Quran. `audio:index` verifies all downloaded SHA-256 hashes and probes exact track durations. Local corpus files and candidate timing artifacts are used only to generate and review Ayah indexes and are not committed. Validate a candidate with `npm run audio:validate -- <timing.json>`; add `--require-verified` for the production gate. Redistribution rights and production Ayah boundaries remain subject to independent review.
+The app streams the exact indexed corpus from `https://abdlh.com/quran/audio/muhammad-al-faqih`. `audio:index` verifies all downloaded SHA-256 hashes and probes exact track durations. Mishary Alafasi is streamed from MP3Quran's separate 114-Surah Hafs catalog and deliberately does not inherit Al-Faqih's timings, hashes, or offline receipts. Local corpus files, raw provider responses, and candidate timing artifacts remain git-ignored. The public Al-Faqih corpus and manifest contain all 114 recordings, while redistribution rights remain a separate unresolved release consideration. Validate a candidate with `npm run audio:validate -- <timing.json>`; add `--require-verified` for the strict human-verification publication gate.
 
 Generate a cache-only ElevenLabs forced-alignment candidate from the exact MP3 and a normalized copy of canonical Uthmani text with:
 

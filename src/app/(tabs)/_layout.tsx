@@ -57,6 +57,13 @@ function WebTabs() {
           tabBarIcon: ({ color }) => <AppSymbol name="headphones" size={18} tintColor={color} />,
         }}
       />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color }) => <AppSymbol name="settings" size={18} tintColor={color} />,
+        }}
+      />
     </Tabs>
   );
 }
@@ -88,6 +95,10 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Icon sf={{ default: 'headphones', selected: 'headphones' }} />
           <NativeTabs.Trigger.Label>Listen</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="settings">
+          <NativeTabs.Trigger.Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} />
+          <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
       </NativeTabs>
     </View>
   );
@@ -97,9 +108,9 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   webTabBar: {
     position: 'absolute',
-    width: 294,
+    width: 344,
     left: '50%',
-    marginLeft: -147,
+    marginLeft: -172,
     bottom: 18,
     height: 62,
     borderTopWidth: 0,

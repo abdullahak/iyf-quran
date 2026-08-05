@@ -22,7 +22,15 @@ export type AppSymbolName =
   | 'fontIncrease'
   | 'next'
   | 'previous'
-  | 'trash';
+  | 'trash'
+  | 'settings'
+  | 'appearance'
+  | 'check'
+  | 'minus'
+  | 'more'
+  | 'queue'
+  | 'timer'
+  | 'speed';
 
 const symbols: Record<
   AppSymbolName,
@@ -50,6 +58,14 @@ const symbols: Record<
   next: { ios: 'forward.end.fill', android: 'skip_next', web: 'skip_next' },
   previous: { ios: 'backward.end.fill', android: 'skip_previous', web: 'skip_previous' },
   trash: { ios: 'trash', android: 'delete', web: 'delete' },
+  settings: { ios: 'gearshape.fill', android: 'settings', web: 'settings' },
+  appearance: { ios: 'circle.lefthalf.filled', android: 'contrast', web: 'contrast' },
+  check: { ios: 'checkmark', android: 'check', web: 'check' },
+  minus: { ios: 'minus', android: 'remove', web: 'remove' },
+  more: { ios: 'ellipsis', android: 'more_horiz', web: 'more_horiz' },
+  queue: { ios: 'list.bullet', android: 'queue_music', web: 'queue_music' },
+  timer: { ios: 'timer', android: 'timer', web: 'timer' },
+  speed: { ios: 'speedometer', android: 'speed', web: 'speed' },
 };
 
 type Props = Omit<SymbolViewProps, 'name'> & {

@@ -3,21 +3,24 @@ import { useFonts } from '@expo-google-fonts/amiri-quran/useFonts';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AudioProvider } from '@/audio/AudioProvider';
 import { OfflineAudioProvider } from '@/audio/OfflineAudioProvider';
+import { PlaybackLibraryProvider } from '@/audio/PlaybackLibraryProvider';
 import { BookmarksProvider } from '@/bookmarks/BookmarksProvider';
 import { PlayerBar } from '@/components/PlayerBar';
+import { ReadingHistoryProvider } from '@/reader/ReadingHistoryProvider';
 import { ReaderSettingsProvider } from '@/reader/ReaderSettingsProvider';
+import { AppSettingsProvider, useAppSettings } from '@/settings/AppSettingsProvider';
 import { palette } from '@/theme/colors';
 
 void SplashScreen.preventAutoHideAsync();
 
 function RootPlayerChrome() {
   const pathname = usePathname();
-  const inTabs = pathname === '/' || pathname === '/quran' || pathname === '/listen';
+  const inTabs = pathname === '/' || pathname === '/quran' || pathname === '/listen' || pathname === '/settings';
   const insets = useSafeAreaInsets();
 
   if (pathname === '/player') return null;
@@ -32,8 +35,6 @@ function RootPlayerChrome() {
 }
 
 export default function RootLayout() {
-  const scheme = useColorScheme();
-  const dark = scheme === 'dark';
   const [fontsLoaded, fontError] = useFonts({ AmiriQuran_400Regular });
 
   useEffect(() => {
@@ -43,6 +44,18 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
   if (fontError) throw fontError;
 
+  return (
+    <SafeAreaProvider>
+      <AppSettingsProvider>
+        <AppShell />
+      </AppSettingsProvider>
+    </SafeAreaProvider>
+  );
+}
+
+function AppShell() {
+  const { colorScheme } = useAppSettings();
+  const dark = colorScheme === 'dark';
   const colors = dark ? palette.dark : palette.light;
   const navigationTheme = dark
     ? {
@@ -55,32 +68,39 @@ export default function RootLayout() {
       };
 
   return (
-    <SafeAreaProvider>
-      <BookmarksProvider>
-        <ReaderSettingsProvider>
-          <OfflineAudioProvider>
-            <AudioProvider>
-              <ThemeProvider value={navigationTheme}>
-                <View style={styles.root}>
-                  <Stack
-                    screenOptions={{
-                      headerShown: false,
-                      contentStyle: { backgroundColor: colors.background },
-                    }}
-                  >
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen name="surah/[id]" />
-                    <Stack.Screen name="bookmarks" options={{ presentation: 'modal' }} />
-                    <Stack.Screen name="player" options={{ presentation: 'fullScreenModal' }} />
-                  </Stack>
-                  <RootPlayerChrome />
-                </View>
-              </ThemeProvider>
-            </AudioProvider>
-          </OfflineAudioProvider>
-        </ReaderSettingsProvider>
-      </BookmarksProvider>
-    </SafeAreaProvider>
+    <BookmarksProvider>
+      <ReaderSettingsProvider>
+        <ReadingHistoryProvider>
+          <PlaybackLibraryProvider>
+            <OfflineAudioProvider>
+              <AudioProvider>
+                <ThemeProvider value={navigationTheme}>
+                  <View style={styles.root}>
+                    <Stack
+                      screenOptions={{
+                        headerShown: false,
+                        contentStyle: { backgroundColor: colors.background },
+                      }}
+                    >
+                      <Stack.Screen name="(tabs)" />
+                      <Stack.Screen name="surah/[id]" />
+                      <Stack.Screen name="mushaf/[page]" />
+                      <Stack.Screen name="bookmarks" options={{ presentation: 'modal' }} />
+                      <Stack.Screen name="playlists" options={{ presentation: 'modal' }} />
+                      <Stack.Screen name="playlist/[id]" />
+                      <Stack.Screen name="add-to-playlist" options={{ presentation: 'modal' }} />
+                      <Stack.Screen name="queue" options={{ presentation: 'modal' }} />
+                      <Stack.Screen name="player" options={{ presentation: 'fullScreenModal' }} />
+                    </Stack>
+                    <RootPlayerChrome />
+                  </View>
+                </ThemeProvider>
+              </AudioProvider>
+            </OfflineAudioProvider>
+          </PlaybackLibraryProvider>
+        </ReadingHistoryProvider>
+      </ReaderSettingsProvider>
+    </BookmarksProvider>
   );
 }
 
