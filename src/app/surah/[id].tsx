@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useQuranAudio } from '@/audio/AudioProvider';
+import { SYNCHRONIZED_TIMINGS } from '@/audio/timings';
 import { makeAyahTarget, makeSurahTarget } from '@/bookmarks/bookmarks';
 import { useBookmarks } from '@/bookmarks/BookmarksProvider';
 import { Atmosphere } from '@/components/Atmosphere';
@@ -12,6 +13,7 @@ import { AppSymbol } from '@/components/AppSymbol';
 import { IconButton } from '@/components/IconButton';
 import { AL_FATIHA_FALLBACK, type QuranChapter } from '@/data/alFatiha';
 import { chapterByNumber } from '@/data/chapters';
+import { useReaderSettings } from '@/reader/ReaderSettingsProvider';
 import { loadChapter } from '@/services/quran';
 import { useAppPalette } from '@/theme/useAppPalette';
 import { radius } from '@/theme/tokens';
@@ -37,11 +39,19 @@ export default function SurahScreen() {
   );
   const [error, setError] = useState<string>();
   const audio = useQuranAudio();
+  const {
+    canDecreaseFont,
+    canIncreaseFont,
+    decreaseFont,
+    fontScale,
+    increaseFont,
+  } = useReaderSettings();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const scrollRef = useRef<ScrollView>(null);
   const ayahListOffset = useRef<number | undefined>(undefined);
   const ayahOffsets = useRef(new Map<number, number>());
   const didScrollTo = useRef<string | undefined>(undefined);
+  const lastFollowedAyah = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +75,23 @@ export default function SurahScreen() {
   useEffect(() => {
     ayahListOffset.current = undefined;
     ayahOffsets.current.clear();
+    lastFollowedAyah.current = undefined;
   }, [number]);
+
+  useEffect(() => {
+    const activeAyah = audio.activeAyah;
+    if (
+      audio.chapter?.number !== number ||
+      !audio.status.playing ||
+      !activeAyah ||
+      lastFollowedAyah.current === activeAyah
+    ) return;
+    const listY = ayahListOffset.current;
+    const ayahY = ayahOffsets.current.get(activeAyah);
+    if (listY === undefined || ayahY === undefined) return;
+    lastFollowedAyah.current = activeAyah;
+    scrollRef.current?.scrollTo({ y: Math.max(0, listY + ayahY - 110), animated: true });
+  }, [audio.activeAyah, audio.chapter?.number, audio.status.playing, number]);
 
   const scrollToBookmarkedAyah = () => {
     if (!Number.isInteger(targetAyah) || targetAyah < 1 || targetAyah > (metadata?.ayahCount ?? 0)) {
@@ -97,6 +123,7 @@ export default function SurahScreen() {
 
   const surahTarget = makeSurahTarget(number);
   const surahBookmarked = isBookmarked(surahTarget.key);
+  const chapterTimingStatus = SYNCHRONIZED_TIMINGS[number]?.[0]?.reviewStatus ?? 'unavailable';
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
@@ -115,15 +142,14 @@ export default function SurahScreen() {
             label={surahBookmarked ? 'Remove surah bookmark' : 'Bookmark this surah'}
             onPress={() => toggleBookmark(surahTarget)}
           />
-          {audio.chapter?.number === number ? (
-            <View style={styles.navigationSpacer} />
-          ) : (
-            <IconButton
-              name="play"
-              label="Play recitation"
-              onPress={() => audio.playChapter(metadata)}
-            />
-          )}
+          <IconButton
+            name={audio.chapter?.number === number && audio.status.playing ? 'pause' : 'play'}
+            label={audio.chapter?.number === number && audio.status.playing ? 'Pause recitation' : 'Play recitation'}
+            onPress={() => {
+              if (audio.chapter?.number === number) audio.toggle();
+              else audio.playChapter(metadata);
+            }}
+          />
         </View>
       </View>
 
@@ -145,9 +171,44 @@ export default function SurahScreen() {
               {metadata.arabicName.replace(/^سُورَةُ\s*/, '')}
             </Text>
             <Text style={[styles.surahEnglish, { color: colors.text }]}>{metadata.englishName}</Text>
-            <Text style={[styles.surahMeaning, { color: colors.textMuted }]}>
-              {metadata.meaning} · {metadata.ayahCount} ayahs
+            <Text style={[styles.surahMeta, { color: colors.textMuted }]}>
+              {metadata.ayahCount} ayahs · {metadata.revelationType}
             </Text>
+            <View style={styles.readerToolbar}>
+              <View style={[styles.syncPill, { backgroundColor: colors.primarySoft }]}>
+                <AppSymbol name="waveform" size={13} tintColor={colors.primary} />
+                <Text style={[styles.syncPillText, { color: colors.primary }]}>
+                  {chapterTimingStatus === 'verified'
+                    ? 'Verified sync'
+                    : chapterTimingStatus === 'machineAligned'
+                      ? 'Beta Ayah sync'
+                      : 'Sync under review'}
+                </Text>
+              </View>
+              <View style={[styles.fontControls, { borderColor: colors.border }]}>
+                <Pressable
+                  disabled={!canDecreaseFont}
+                  onPress={decreaseFont}
+                  accessibilityRole="button"
+                  accessibilityLabel="Decrease Quran font size"
+                  accessibilityState={{ disabled: !canDecreaseFont }}
+                  style={[styles.fontButton, { opacity: canDecreaseFont ? 1 : 0.3 }]}
+                >
+                  <AppSymbol name="fontDecrease" size={17} tintColor={colors.text} />
+                </Pressable>
+                <Text style={[styles.fontScaleLabel, { color: colors.textMuted }]}>Aa</Text>
+                <Pressable
+                  disabled={!canIncreaseFont}
+                  onPress={increaseFont}
+                  accessibilityRole="button"
+                  accessibilityLabel="Increase Quran font size"
+                  accessibilityState={{ disabled: !canIncreaseFont }}
+                  style={[styles.fontButton, { opacity: canIncreaseFont ? 1 : 0.3 }]}
+                >
+                  <AppSymbol name="fontIncrease" size={17} tintColor={colors.text} />
+                </Pressable>
+              </View>
+            </View>
           </View>
 
           {!chapter && !error ? (
@@ -186,8 +247,31 @@ export default function SurahScreen() {
               ayahListOffset.current = event.nativeEvent.layout.y;
               scrollToBookmarkedAyah();
             }}
-            style={styles.ayahList}
+            style={[
+              styles.ayahList,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
           >
+            {chapter && number !== 1 && number !== 9 ? (
+              <>
+                <View style={styles.basmalaRow}>
+                  <Text
+                    accessibilityLanguage="ar"
+                    style={[
+                      styles.basmalaText,
+                      {
+                        color: colors.text,
+                        fontSize: 29 * fontScale,
+                        lineHeight: 50 * fontScale,
+                      },
+                    ]}
+                  >
+                    بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
+                  </Text>
+                </View>
+                <View style={[styles.ayahDivider, { backgroundColor: colors.border }]} />
+              </>
+            ) : null}
             {chapter?.ayahs.map((ayah, index) => {
               const active = audio.chapter?.number === number && audio.activeAyah === ayah.number;
               const targeted = targetAyah === ayah.number;
@@ -200,8 +284,23 @@ export default function SurahScreen() {
                 <View
                   key={ayah.number}
                   onLayout={(event) => {
-                    ayahOffsets.current.set(ayah.number, event.nativeEvent.layout.y);
+                    const y = event.nativeEvent.layout.y;
+                    ayahOffsets.current.set(ayah.number, y);
                     if (targeted) scrollToBookmarkedAyah();
+                    if (
+                      active &&
+                      audio.status.playing &&
+                      lastFollowedAyah.current !== ayah.number &&
+                      ayahListOffset.current !== undefined
+                    ) {
+                      lastFollowedAyah.current = ayah.number;
+                      requestAnimationFrame(() => {
+                        scrollRef.current?.scrollTo({
+                          y: Math.max(0, ayahListOffset.current! + y - 92),
+                          animated: true,
+                        });
+                      });
+                    }
                   }}
                 >
                   <View
@@ -212,8 +311,8 @@ export default function SurahScreen() {
                         borderStartColor: colors.primary,
                       },
                       active && {
-                        backgroundColor: colors.goldSoft,
-                        borderStartColor: colors.gold,
+                        backgroundColor: colors.primarySoft,
+                        borderStartColor: colors.primary,
                       },
                     ]}
                   >
@@ -253,7 +352,7 @@ export default function SurahScreen() {
                         </Text>
                       </Pressable>
                       <View style={styles.ayahMetaGroup}>
-                        {audio.hasVerifiedTimings ? (
+                        {audio.chapter?.number === number && audio.timingStatus !== 'unavailable' ? (
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel={`Play from Ayah ${ayah.number}`}
@@ -267,7 +366,7 @@ export default function SurahScreen() {
                             <AppSymbol
                               name="waveform"
                               size={14}
-                              tintColor={active ? colors.gold : colors.textFaint}
+                              tintColor={active ? colors.primary : colors.textFaint}
                             />
                           </Pressable>
                         ) : null}
@@ -278,11 +377,17 @@ export default function SurahScreen() {
                     </View>
                     <Text
                       accessibilityLanguage="ar"
-                      style={[styles.ayahArabic, { color: colors.text }]}
+                      style={[
+                        styles.ayahArabic,
+                        {
+                          color: colors.text,
+                          fontSize: 34 * fontScale,
+                          lineHeight: 61 * fontScale,
+                        },
+                      ]}
                     >
                       {ayah.arabic}
                     </Text>
-                    <Text style={[styles.translation, { color: colors.textMuted }]}>{ayah.translation}</Text>
                   </View>
                   {index < (chapter?.ayahs.length ?? 0) - 1 ? (
                     <View style={[styles.ayahDivider, { backgroundColor: colors.border }]} />
@@ -294,7 +399,7 @@ export default function SurahScreen() {
 
           {chapter ? (
             <Text style={[styles.attribution, { color: colors.textFaint }]}>
-              Uthmani Arabic · {chapter.translationName}
+              Uthmani Arabic Quran text
             </Text>
           ) : null}
         </View>
@@ -319,13 +424,12 @@ const styles = StyleSheet.create({
   navigationStart: { width: 88, flexDirection: 'row' },
   navigationTitle: { flex: 1, alignItems: 'center' },
   navigationActions: { width: 88, flexDirection: 'row', justifyContent: 'flex-end' },
-  navigationSpacer: { width: 44, height: 44 },
   navTitle: { fontSize: 15, fontWeight: '600', letterSpacing: -0.15 },
   navMeta: { fontSize: 10, marginTop: 2 },
   scrollContent: { paddingBottom: 54 },
   scrollContentWithPlayer: { paddingBottom: 132 },
-  content: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 18 },
-  surahHeader: { alignItems: 'center', paddingTop: 20, paddingBottom: 24 },
+  content: { width: '100%', maxWidth: 680, alignSelf: 'center', paddingHorizontal: 14 },
+  surahHeader: { alignItems: 'center', paddingTop: 18, paddingBottom: 18 },
   surahNumber: { fontSize: 13, lineHeight: 18, fontWeight: '500' },
   surahArabic: {
     fontFamily: 'AmiriQuran_400Regular',
@@ -335,7 +439,33 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   surahEnglish: { fontSize: 17, lineHeight: 22, fontWeight: '600' },
-  surahMeaning: { fontSize: 13, lineHeight: 18, marginTop: 4 },
+  surahMeta: { fontSize: 13, lineHeight: 18, marginTop: 4 },
+  readerToolbar: {
+    width: '100%',
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  syncPill: {
+    minHeight: 34,
+    borderRadius: 17,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  syncPillText: { fontSize: 10, lineHeight: 14, fontWeight: '700' },
+  fontControls: {
+    height: 36,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 18,
+    paddingHorizontal: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  fontButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  fontScaleLabel: { fontSize: 10, lineHeight: 14, fontWeight: '700' },
   loading: { paddingVertical: 70, alignItems: 'center', gap: 12 },
   loadingText: { fontSize: 13 },
   errorPanel: {
@@ -348,12 +478,25 @@ const styles = StyleSheet.create({
   errorTitle: { marginTop: 12, fontSize: 18, fontWeight: '600' },
   errorBody: { fontSize: 13, lineHeight: 20, marginTop: 6 },
   errorLink: { fontSize: 14, fontWeight: '600', marginTop: 14 },
-  ayahList: { paddingBottom: 10 },
+  ayahList: {
+    paddingVertical: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.panel,
+    overflow: 'hidden',
+  },
+  basmalaRow: { paddingHorizontal: 16, paddingVertical: 10 },
+  basmalaText: {
+    fontFamily: 'AmiriQuran_400Regular',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
   ayah: {
-    borderStartWidth: 2,
+    borderStartWidth: 3,
     borderStartColor: 'transparent',
-    paddingHorizontal: 8,
-    paddingVertical: 28,
+    marginHorizontal: 7,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 15,
   },
   ayahTopline: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   ayahNumber: {
@@ -371,12 +514,11 @@ const styles = StyleSheet.create({
   ayahArabic: {
     fontFamily: 'AmiriQuran_400Regular',
     fontSize: 34,
-    lineHeight: 64,
+    lineHeight: 61,
     textAlign: 'right',
     writingDirection: 'rtl',
-    marginTop: 15,
+    marginTop: 8,
   },
-  translation: { fontSize: 17, lineHeight: 26, marginTop: 16 },
-  ayahDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: 8 },
+  ayahDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: 20 },
   attribution: { textAlign: 'center', fontSize: 10, marginTop: 24, marginBottom: 18 },
 });

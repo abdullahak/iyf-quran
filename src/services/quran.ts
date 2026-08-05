@@ -3,7 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AL_FATIHA_FALLBACK, type Ayah, type QuranChapter } from '@/data/alFatiha';
 
 const API_BASE = 'https://api.alquran.cloud/v1';
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 4;
+const PROVIDER_BASMALA_PREFIXES = [
+  'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
+  'بِّسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
+  'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
+] as const;
 
 type ApiAyah = {
   text: string;
@@ -27,46 +32,43 @@ type ApiEdition = {
 
 type ApiResponse = {
   code: number;
-  data: ApiEdition[];
+  data: ApiEdition;
 };
 
 export function parseChapterResponse(payload: ApiResponse): QuranChapter {
-  if (payload.code !== 200 || !Array.isArray(payload.data)) {
+  if (payload.code !== 200 || !payload.data || Array.isArray(payload.data)) {
     throw new Error('The Quran service returned an invalid response.');
   }
 
-  const arabic = payload.data.find((edition) => edition.edition.identifier === 'quran-uthmani');
-  const english = payload.data.find((edition) => edition.edition.identifier === 'en.sahih');
-  if (!arabic || !english || arabic.number !== english.number) {
-    throw new Error('The Quran service did not return both requested editions.');
-  }
-  if (arabic.ayahs.length !== english.ayahs.length) {
-    throw new Error('Arabic and English ayah counts do not match.');
+  const arabic = payload.data;
+  if (arabic.edition.identifier !== 'quran-uthmani') {
+    throw new Error('The Quran service did not return the expected Uthmani Arabic edition.');
   }
 
-  const ayahs: Ayah[] = arabic.ayahs.map((ayah, index) => {
-    const translation = english.ayahs[index];
-    if (!translation || translation.numberInSurah !== ayah.numberInSurah) {
-      throw new Error('Arabic and English ayah numbers do not match.');
-    }
-    return {
-      number: ayah.numberInSurah,
-      arabic: ayah.text.replace(/^\uFEFF/, ''),
-      translation: translation.text,
-      page: ayah.page,
-      juz: ayah.juz,
-    };
-  });
+  const ayahs: Ayah[] = arabic.ayahs.map((ayah) => ({
+    number: ayah.numberInSurah,
+    arabic: separateProviderBasmala(
+      ayah.text.replace(/^\uFEFF/, ''),
+      arabic.number,
+      ayah.numberInSurah,
+    ),
+    page: ayah.page,
+    juz: ayah.juz,
+  }));
 
   return {
     number: arabic.number,
     arabicName: arabic.name,
     englishName: arabic.englishName,
-    meaning: arabic.englishNameTranslation,
     revelationType: arabic.revelationType,
     ayahs,
-    translationName: english.edition.englishName,
   };
+}
+
+function separateProviderBasmala(text: string, surah: number, ayah: number): string {
+  if (surah === 1 || surah === 9 || ayah !== 1) return text;
+  const prefix = PROVIDER_BASMALA_PREFIXES.find((candidate) => text.startsWith(candidate));
+  return prefix ? text.slice(prefix.length).trimStart() : text;
 }
 
 export async function loadChapter(number: number): Promise<QuranChapter> {
@@ -86,7 +88,7 @@ export async function loadChapter(number: number): Promise<QuranChapter> {
 
   try {
     const response = await fetch(
-      `${API_BASE}/surah/${number}/editions/quran-uthmani,en.sahih`,
+      `${API_BASE}/surah/${number}/quran-uthmani`,
     );
     if (!response.ok) throw new Error(`Quran service failed with HTTP ${response.status}.`);
     const chapter = parseChapterResponse((await response.json()) as ApiResponse);

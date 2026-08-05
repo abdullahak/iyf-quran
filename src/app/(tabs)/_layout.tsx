@@ -46,7 +46,7 @@ function WebTabs() {
       <Tabs.Screen
         name="quran"
         options={{
-          title: 'Quran',
+          title: 'Read',
           tabBarIcon: ({ color }) => <AppSymbol name="book" size={18} tintColor={color} />,
         }}
       />
@@ -82,7 +82,7 @@ export default function TabsLayout() {
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="quran">
           <NativeTabs.Trigger.Icon sf={{ default: 'book.closed', selected: 'book.closed.fill' }} />
-          <NativeTabs.Trigger.Label>Quran</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Label>Read</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="listen">
           <NativeTabs.Trigger.Icon sf={{ default: 'headphones', selected: 'headphones' }} />

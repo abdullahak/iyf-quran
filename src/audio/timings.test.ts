@@ -1,16 +1,19 @@
 import {
   activeAyahAt,
+  compileMachineAlignedTimingIndex,
   compileVerifiedTimingIndex,
   compileVerifiedTimingRegistry,
+  MACHINE_ALIGNMENT_ACCEPTANCE_POLICY,
   VERIFIED_TIMINGS,
   validateTimings,
   type AyahTiming,
+  type MachineTimingIndex,
   type SurahTimingIndex,
 } from './timings';
 
 const timings: AyahTiming[] = [
-  { ayah: 1, start: 0.5, end: 3.2, confidence: 0.98, verified: true },
-  { ayah: 2, start: 3.2, end: 7.9, confidence: 0.96, verified: true },
+  { ayah: 1, start: 0.5, end: 3.2, confidence: 0.98, verified: true, reviewStatus: 'verified' },
+  { ayah: 2, start: 3.2, end: 7.9, confidence: 0.96, verified: true, reviewStatus: 'verified' },
 ];
 
 const timingIndex: SurahTimingIndex = {
@@ -40,7 +43,7 @@ describe('ayah timing helpers', () => {
     expect(
       validateTimings([
         timings[0],
-        { ayah: 3, start: 3, end: 4, confidence: 1.1, verified: false },
+        { ayah: 3, start: 3, end: 4, confidence: 1.1, verified: false, reviewStatus: 'machineAligned' },
       ]),
     ).toBe(false);
   });
@@ -86,5 +89,46 @@ describe('ayah timing helpers', () => {
         1: { ...verifiedFatiha, audioSha256: 'wrong-track' },
       }),
     ).toEqual({});
+  });
+
+  it('compiles a complete exact-track machine alignment without calling it verified', () => {
+    const machineIndex: MachineTimingIndex = {
+      schemaVersion: 1,
+      surah: 1,
+      audioSha256: 'exact-audio-hash',
+      durationMs: 7900,
+      reviewStatus: 'machineAligned',
+      acceptancePolicy: MACHINE_ALIGNMENT_ACCEPTANCE_POLICY,
+      startMs: [500, 3200],
+    };
+
+    expect(
+      compileMachineAlignedTimingIndex(machineIndex, {
+        audioSha256: 'exact-audio-hash',
+        ayahCount: 2,
+        durationMs: 7900,
+      }),
+    ).toEqual([
+      { ayah: 1, start: 0.5, end: 3.2, confidence: 0, verified: false, reviewStatus: 'machineAligned' },
+      { ayah: 2, start: 3.2, end: 7.9, confidence: 0, verified: false, reviewStatus: 'machineAligned' },
+    ]);
+    expect(
+      compileMachineAlignedTimingIndex(
+        { ...machineIndex, audioSha256: 'different-track' },
+        { audioSha256: 'exact-audio-hash', ayahCount: 2, durationMs: 7900 },
+      ),
+    ).toBeUndefined();
+    expect(
+      compileMachineAlignedTimingIndex(
+        { ...machineIndex, durationMs: 7901 },
+        { audioSha256: 'exact-audio-hash', ayahCount: 2, durationMs: 7900 },
+      ),
+    ).toBeUndefined();
+    expect(
+      compileMachineAlignedTimingIndex(
+        { ...machineIndex, acceptancePolicy: 'unknown-policy' },
+        { audioSha256: 'exact-audio-hash', ayahCount: 2, durationMs: 7900 },
+      ),
+    ).toBeUndefined();
   });
 });

@@ -7,8 +7,10 @@ import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AudioProvider } from '@/audio/AudioProvider';
+import { OfflineAudioProvider } from '@/audio/OfflineAudioProvider';
 import { BookmarksProvider } from '@/bookmarks/BookmarksProvider';
 import { PlayerBar } from '@/components/PlayerBar';
+import { ReaderSettingsProvider } from '@/reader/ReaderSettingsProvider';
 import { palette } from '@/theme/colors';
 
 void SplashScreen.preventAutoHideAsync();
@@ -18,6 +20,7 @@ function RootPlayerChrome() {
   const inTabs = pathname === '/' || pathname === '/quran' || pathname === '/listen';
   const insets = useSafeAreaInsets();
 
+  if (pathname === '/player') return null;
   if (Platform.OS === 'ios' && inTabs) return null;
 
   let bottomOffset = Math.max(insets.bottom + 10, 18);
@@ -54,23 +57,28 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <BookmarksProvider>
-        <AudioProvider>
-          <ThemeProvider value={navigationTheme}>
-            <View style={styles.root}>
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: colors.background },
-                }}
-              >
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="surah/[id]" />
-                <Stack.Screen name="bookmarks" options={{ presentation: 'modal' }} />
-              </Stack>
-              <RootPlayerChrome />
-            </View>
-          </ThemeProvider>
-        </AudioProvider>
+        <ReaderSettingsProvider>
+          <OfflineAudioProvider>
+            <AudioProvider>
+              <ThemeProvider value={navigationTheme}>
+                <View style={styles.root}>
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                      contentStyle: { backgroundColor: colors.background },
+                    }}
+                  >
+                    <Stack.Screen name="(tabs)" />
+                    <Stack.Screen name="surah/[id]" />
+                    <Stack.Screen name="bookmarks" options={{ presentation: 'modal' }} />
+                    <Stack.Screen name="player" options={{ presentation: 'fullScreenModal' }} />
+                  </Stack>
+                  <RootPlayerChrome />
+                </View>
+              </ThemeProvider>
+            </AudioProvider>
+          </OfflineAudioProvider>
+        </ReaderSettingsProvider>
       </BookmarksProvider>
     </SafeAreaProvider>
   );

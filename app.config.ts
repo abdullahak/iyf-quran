@@ -12,7 +12,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: 'automatic',
   ios: {
     bundleIdentifier: 'com.abdlh.iyfquran',
-    buildNumber: '1',
     supportsTablet: true,
     icon: './assets/images/icon.png',
     infoPlist: {

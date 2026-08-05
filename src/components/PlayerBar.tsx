@@ -17,7 +17,15 @@ type Props = {
 export function PlayerBar({ embedded = false, compact = false, bottomOffset = 88 }: Props) {
   const colors = useAppPalette();
   const router = useRouter();
-  const { chapter, status, toggle } = useQuranAudio();
+  const {
+    canPlayNext,
+    canPlayPrevious,
+    chapter,
+    nextChapter,
+    previousChapter,
+    status,
+    toggle,
+  } = useQuranAudio();
   if (!chapter) return null;
 
   const progress = status.duration > 0 ? Math.min(1, status.currentTime / status.duration) : 0;
@@ -28,7 +36,7 @@ export function PlayerBar({ embedded = false, compact = false, bottomOffset = 88
       <Pressable
         onPress={() => {
           void Haptics.selectionAsync();
-          router.push({ pathname: '/surah/[id]', params: { id: String(chapter.number) } });
+          router.push('/player');
         }}
         style={styles.details}
         accessibilityRole="button"
@@ -41,11 +49,26 @@ export function PlayerBar({ embedded = false, compact = false, bottomOffset = 88
         >
           {chapter.arabicName.replace(/^سُورَةُ\s*/, '')}
         </Text>
-        {!compact ? (
-          <Text style={[styles.meta, { color: colors.textMuted }]}>
-            {chapter.englishName} · Muhammad Al-Faqih
-          </Text>
-        ) : null}
+        <Text style={[styles.meta, { color: colors.textMuted }]} numberOfLines={1}>
+          {chapter.englishName}{compact ? '' : ' · Muhammad Al-Faqih'}
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={() => {
+          void Haptics.selectionAsync();
+          previousChapter();
+        }}
+        disabled={!canPlayPrevious}
+        accessibilityRole="button"
+        accessibilityLabel="Previous Surah"
+        accessibilityState={{ disabled: !canPlayPrevious }}
+        hitSlop={8}
+        style={({ pressed }) => [
+          styles.secondaryControl,
+          { opacity: !canPlayPrevious ? 0.28 : pressed ? 0.55 : 1 },
+        ]}
+      >
+        <AppSymbol name="previous" tintColor={colors.text} size={compact ? 17 : 19} weight="semibold" />
       </Pressable>
       <Pressable
         onPress={() => {
@@ -56,7 +79,7 @@ export function PlayerBar({ embedded = false, compact = false, bottomOffset = 88
         accessibilityLabel={status.playing ? 'Pause recitation' : 'Play recitation'}
         accessibilityState={{ selected: status.playing }}
         style={({ pressed }) => [
-          styles.control,
+          styles.playControl,
           { backgroundColor: colors.primarySoft, opacity: pressed ? 0.62 : 1 },
         ]}
       >
@@ -66,6 +89,23 @@ export function PlayerBar({ embedded = false, compact = false, bottomOffset = 88
           size={17}
           weight="semibold"
         />
+      </Pressable>
+      <Pressable
+        onPress={() => {
+          void Haptics.selectionAsync();
+          nextChapter();
+        }}
+        disabled={!canPlayNext}
+        accessibilityRole="button"
+        accessibilityLabel="Next Surah"
+        accessibilityState={{ disabled: !canPlayNext }}
+        hitSlop={8}
+        style={({ pressed }) => [
+          styles.secondaryControl,
+          { opacity: !canPlayNext ? 0.28 : pressed ? 0.55 : 1 },
+        ]}
+      >
+        <AppSymbol name="next" tintColor={colors.text} size={compact ? 17 : 19} weight="semibold" />
       </Pressable>
       <View
         accessible
@@ -116,9 +156,9 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   compactContent: {
-    minHeight: 50,
+    minHeight: 54,
     paddingVertical: 3,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   track: {
     position: 'absolute',
@@ -130,21 +170,27 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progress: { height: '100%', borderRadius: 2 },
-  details: { flex: 1, minWidth: 0, paddingHorizontal: 6, paddingVertical: 2 },
+  details: { flex: 1, minWidth: 0, paddingHorizontal: 8, paddingVertical: 2 },
   title: {
     fontFamily: 'AmiriQuran_400Regular',
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 18,
+    lineHeight: 23,
     textAlign: 'left',
     writingDirection: 'rtl',
   },
-  meta: { fontSize: 11, lineHeight: 15, marginTop: 1 },
-  control: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  meta: { fontSize: 10, lineHeight: 13 },
+  secondaryControl: {
+    width: 32,
+    height: 42,
     alignItems: 'center',
     justifyContent: 'center',
-    marginStart: 8,
+  },
+  playControl: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 2,
   },
 });

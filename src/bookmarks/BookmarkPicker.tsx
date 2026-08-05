@@ -52,7 +52,7 @@ export function BookmarkPicker({ visible, onClose }: Props) {
     if (!normalized) return CHAPTERS;
     return CHAPTERS.filter((candidate) =>
       normalizeQuranSearch(
-        `${candidate.number} ${candidate.englishName} ${candidate.meaning} ${candidate.arabicName}`,
+        `${candidate.number} ${candidate.englishName} ${candidate.arabicName}`,
       ).includes(normalized),
     );
   }, [query]);
@@ -109,7 +109,7 @@ export function BookmarkPicker({ visible, onClose }: Props) {
                     {chapter.englishName}
                   </Text>
                   <Text style={[styles.selectedMeta, { color: colors.textMuted }]}>
-                    {chapter.meaning} · {chapter.ayahCount} ayahs
+                    Surah {chapter.number} · {chapter.ayahCount} ayahs
                   </Text>
                 </View>
                 <BookmarkChoice
@@ -181,7 +181,7 @@ export function BookmarkPicker({ visible, onClose }: Props) {
                 <View style={styles.chapterCopy}>
                   <Text style={[styles.chapterEnglish, { color: colors.text }]}>{item.englishName}</Text>
                   <Text style={[styles.chapterMeta, { color: colors.textMuted }]}>
-                    {item.meaning} · {item.ayahCount} ayahs
+                    Surah {item.number} · {item.ayahCount} ayahs
                   </Text>
                 </View>
                 <Text

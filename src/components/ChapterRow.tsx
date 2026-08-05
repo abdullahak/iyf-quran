@@ -11,39 +11,57 @@ type Props = {
   onPress?: () => void;
   playing?: boolean;
   action?: 'open' | 'play';
+  startAyah?: number;
+  subtitle?: string;
+  trailing?: React.ReactNode;
 };
 
-export function ChapterRow({ chapter, onPress, playing = false, action = 'open' }: Props) {
+export function ChapterRow({
+  action = 'open',
+  chapter,
+  onPress,
+  playing = false,
+  startAyah,
+  subtitle,
+  trailing,
+}: Props) {
   const colors = useAppPalette();
   const router = useRouter();
   const handlePress =
     onPress ??
-    (() => router.push({ pathname: '/surah/[id]', params: { id: String(chapter.number) } }));
+    (() => router.push({
+      pathname: '/surah/[id]',
+      params: {
+        id: String(chapter.number),
+        ...(startAyah ? { ayah: String(startAyah) } : {}),
+      },
+    }));
 
   return (
-    <Pressable
-      onPress={() => {
-        void Haptics.selectionAsync();
-        handlePress();
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={`${playing ? 'Pause' : action === 'play' ? 'Play' : 'Open'} Surah ${chapter.englishName}, ${chapter.ayahCount} ayahs`}
-      accessibilityState={{ selected: playing }}
-      style={({ pressed }) => [
-        styles.row,
-        {
-          backgroundColor: pressed ? colors.primarySoft : 'transparent',
-          borderStartColor: playing ? colors.primary : 'transparent',
-        },
-      ]}
-    >
+    <View style={styles.shell}>
+      <Pressable
+        onPress={() => {
+          void Haptics.selectionAsync();
+          handlePress();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={`${playing ? 'Pause' : action === 'play' ? 'Play' : 'Open'} Surah ${chapter.englishName}, ${chapter.ayahCount} ayahs${subtitle ? `, ${subtitle}` : ''}`}
+        accessibilityState={{ selected: playing }}
+        style={({ pressed }) => [
+          styles.row,
+          {
+            backgroundColor: pressed ? colors.primarySoft : 'transparent',
+            borderStartColor: playing ? colors.primary : 'transparent',
+          },
+        ]}
+      >
       <Text style={[styles.numberText, { color: colors.textFaint }]}>
         {String(chapter.number).padStart(2, '0')}
       </Text>
       <View style={styles.english}>
         <Text style={[styles.title, { color: colors.text }]}>{chapter.englishName}</Text>
         <Text style={[styles.meta, { color: colors.textMuted }]}>
-          {chapter.meaning} · {chapter.ayahCount} ayahs
+          {subtitle ?? `Surah ${chapter.number} · ${chapter.ayahCount} ayahs`}
         </Text>
       </View>
       <Text
@@ -62,12 +80,16 @@ export function ChapterRow({ chapter, onPress, playing = false, action = 'open' 
           />
         </View>
       ) : null}
-    </Pressable>
+      </Pressable>
+      {trailing}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  shell: { flexDirection: 'row', alignItems: 'center' },
   row: {
+    flex: 1,
     minHeight: 76,
     borderStartWidth: 2,
     flexDirection: 'row',

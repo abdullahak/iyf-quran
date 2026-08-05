@@ -15,7 +15,14 @@ export type AppSymbolName =
   | 'bookmark'
   | 'bookmarkFilled'
   | 'add'
-  | 'close';
+  | 'close'
+  | 'download'
+  | 'downloaded'
+  | 'fontDecrease'
+  | 'fontIncrease'
+  | 'next'
+  | 'previous'
+  | 'trash';
 
 const symbols: Record<
   AppSymbolName,
@@ -36,6 +43,13 @@ const symbols: Record<
   bookmarkFilled: { ios: 'bookmark.fill', android: 'bookmark', web: 'bookmark' },
   add: { ios: 'plus', android: 'add', web: 'add' },
   close: { ios: 'xmark', android: 'close', web: 'close' },
+  download: { ios: 'arrow.down.circle', android: 'download', web: 'download' },
+  downloaded: { ios: 'checkmark.circle.fill', android: 'download_done', web: 'download_done' },
+  fontDecrease: { ios: 'textformat.size.smaller', android: 'text_decrease', web: 'text_decrease' },
+  fontIncrease: { ios: 'textformat.size.larger', android: 'text_increase', web: 'text_increase' },
+  next: { ios: 'forward.end.fill', android: 'skip_next', web: 'skip_next' },
+  previous: { ios: 'backward.end.fill', android: 'skip_previous', web: 'skip_previous' },
+  trash: { ios: 'trash', android: 'delete', web: 'delete' },
 };
 
 type Props = Omit<SymbolViewProps, 'name'> & {

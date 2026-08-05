@@ -71,7 +71,7 @@ export default function HomeScreen() {
               {AL_FATIHA_FALLBACK.ayahs[0].arabic}
             </Text>
             <View style={styles.continueFooter}>
-              <Text style={[styles.continueMeta, { color: colors.textMuted }]}>Al-Faatiha · The Opening · 7 ayahs</Text>
+              <Text style={[styles.continueMeta, { color: colors.textMuted }]}>Al-Faatiha · 7 ayahs</Text>
               <AppSymbol name="book" size={18} tintColor={colors.gold} />
             </View>
           </Pressable>

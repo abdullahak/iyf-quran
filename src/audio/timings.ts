@@ -1,4 +1,5 @@
 import { recitationTrack } from './reciter';
+import { MACHINE_TIMING_INDEXES } from './machineTimingIndexes';
 import { VERIFIED_TIMING_INDEXES } from './verifiedTimingIndexes';
 
 export type AyahTiming = {
@@ -7,6 +8,7 @@ export type AyahTiming = {
   end: number;
   confidence: number;
   verified: boolean;
+  reviewStatus: 'machineAligned' | 'verified';
 };
 
 export type TimingReviewStatus = 'candidate' | 'reviewed' | 'verified';
@@ -39,6 +41,19 @@ export type SurahTimingIndex = {
   reviewStatus: TimingReviewStatus;
   ayahs: readonly AyahTimingPoint[];
 };
+
+export type MachineTimingIndex = {
+  schemaVersion: 1;
+  surah: number;
+  audioSha256: string;
+  durationMs: number;
+  reviewStatus: 'machineAligned';
+  acceptancePolicy: string;
+  startMs: readonly number[];
+};
+
+export const MACHINE_ALIGNMENT_ACCEPTANCE_POLICY =
+  'beta-exact-track-complete-monotonic-excluding-corpus-blocked-v1';
 
 export function validateTimings(timings: readonly AyahTiming[]): boolean {
   return timings.every((timing, index) => {
@@ -95,6 +110,49 @@ export function compileVerifiedTimingIndex(
       end: (next?.startMs ?? index.durationMs) / 1000,
       confidence: point.confidence,
       verified: true,
+      reviewStatus: 'verified' as const,
+    } satisfies AyahTiming;
+  });
+
+  if (timings.some((timing) => !timing)) return undefined;
+  const complete = timings as AyahTiming[];
+  return validateTimings(complete) ? complete : undefined;
+}
+
+export function compileMachineAlignedTimingIndex(
+  index: MachineTimingIndex,
+  expected: { audioSha256: string; ayahCount: number; durationMs: number },
+): AyahTiming[] | undefined {
+  if (
+    index.schemaVersion !== 1 ||
+    index.reviewStatus !== 'machineAligned' ||
+    index.acceptancePolicy !== MACHINE_ALIGNMENT_ACCEPTANCE_POLICY ||
+    index.audioSha256 !== expected.audioSha256 ||
+    !Number.isFinite(index.durationMs) ||
+    index.durationMs !== expected.durationMs ||
+    index.startMs.length !== expected.ayahCount
+  ) {
+    return undefined;
+  }
+
+  const timings = index.startMs.map((startMs, indexInSurah) => {
+    const nextStartMs = index.startMs[indexInSurah + 1] ?? index.durationMs;
+    if (
+      !Number.isFinite(startMs) ||
+      !Number.isFinite(nextStartMs) ||
+      startMs < 0 ||
+      nextStartMs <= startMs ||
+      nextStartMs > index.durationMs
+    ) {
+      return undefined;
+    }
+    return {
+      ayah: indexInSurah + 1,
+      start: startMs / 1000,
+      end: nextStartMs / 1000,
+      confidence: 0,
+      verified: false,
+      reviewStatus: 'machineAligned' as const,
     } satisfies AyahTiming;
   });
 
@@ -124,5 +182,32 @@ export function compileVerifiedTimingRegistry(
   return compiled;
 }
 
+export function compileMachineAlignedTimingRegistry(
+  indexes: Readonly<Partial<Record<number, MachineTimingIndex>>>,
+): Readonly<Partial<Record<number, readonly AyahTiming[]>>> {
+  const compiled: Partial<Record<number, readonly AyahTiming[]>> = {};
+  Object.entries(indexes).forEach(([surahKey, index]) => {
+    const surah = Number(surahKey);
+    if (!index || index.surah !== surah) return;
+    try {
+      const track = recitationTrack({ number: surah });
+      const timings = compileMachineAlignedTimingIndex(index, {
+        audioSha256: track.sha256,
+        ayahCount: track.ayahCount,
+        durationMs: track.durationMs,
+      });
+      if (timings) compiled[surah] = timings;
+    } catch {
+      // Invalid/non-canonical beta entries remain unavailable at runtime.
+    }
+  });
+  return compiled;
+}
+
 // The generated registry remains empty until a complete manifest clears the publish gate.
 export const VERIFIED_TIMINGS = compileVerifiedTimingRegistry(VERIFIED_TIMING_INDEXES);
+export const MACHINE_ALIGNED_TIMINGS = compileMachineAlignedTimingRegistry(MACHINE_TIMING_INDEXES);
+export const SYNCHRONIZED_TIMINGS = {
+  ...MACHINE_ALIGNED_TIMINGS,
+  ...VERIFIED_TIMINGS,
+} satisfies Readonly<Partial<Record<number, readonly AyahTiming[]>>>;

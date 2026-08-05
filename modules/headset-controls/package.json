@@ -1,0 +1,7 @@
+{
+  "name": "headset-controls",
+  "version": "0.1.0",
+  "description": "iOS remote next and previous Surah commands for IYF Quran.",
+  "private": true,
+  "license": "MIT"
+}
