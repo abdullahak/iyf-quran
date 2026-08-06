@@ -13,7 +13,7 @@ A modern family Quran app built with Expo development builds. IYF Quran is inspi
 - Canonical 604-page Hafs Medina reading view, fast Surah/Juz/page navigation, real recent pages, and persisted reader font sizing
 - Ordered queues and user playlists built from whole Surahs or Ayah ranges, plus page/Juz/Surah stop rules and a sleep timer
 - System/light/dark appearance settings and reciter selection
-- Per-Surah offline downloads with cancellable transfer, incremental SHA-256 verification, cache-purge reconciliation, and local-first playback
+- Rights-gated per-Surah offline infrastructure with cancellable transfer, incremental SHA-256 verification, cache-purge reconciliation, and local-first playback; new downloads remain disabled until written redistribution permission is archived
 
 ## Development
 
@@ -50,7 +50,7 @@ npm run audio:download
 npm run audio:index
 ```
 
-The app streams the exact indexed corpus from `https://abdlh.com/quran/audio/muhammad-al-faqih`. `audio:index` verifies all downloaded SHA-256 hashes and probes exact track durations. Mishary Alafasi is streamed from MP3Quran's separate 114-Surah Hafs catalog and deliberately does not inherit Al-Faqih's timings, hashes, or offline receipts. Local corpus files, raw provider responses, and candidate timing artifacts remain git-ignored. The public Al-Faqih corpus and manifest contain all 114 recordings, while redistribution rights remain a separate unresolved release consideration. Validate a candidate with `npm run audio:validate -- <timing.json>`; add `--require-verified` for the strict human-verification publication gate.
+The app streams the exact indexed Muhammad Al-Faqih corpus directly from MP3Quran. `audio:index` verifies all downloaded development-corpus SHA-256 hashes and probes exact track durations. New in-app offline downloads fail closed until written redistribution permission for the exact corpus is archived; the release runtime does not reference a project-operated audio mirror. Mishary Alafasi is streamed from MP3Quran's separate 114-Surah Hafs catalog and deliberately does not inherit Al-Faqih's timings, hashes, or offline receipts. Local corpus files, raw provider responses, and candidate timing artifacts remain git-ignored. Validate a candidate with `npm run audio:validate -- <timing.json>`; add `--require-verified` for the strict human-verification publication gate.
 
 Generate a cache-only ElevenLabs forced-alignment candidate from the exact MP3 and a normalized copy of canonical Uthmani text with:
 

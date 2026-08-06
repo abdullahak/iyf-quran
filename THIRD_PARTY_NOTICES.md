@@ -14,7 +14,7 @@ Reciter: Muhammad Al-Faqih (Hafs).
 
 Catalog and stream source: [MP3Quran](https://mp3quran.net/eng/mhmd-lfkyh), catalog ID `21184`, mushaf ID `10906`. Quran Central also publishes an identical decoded recording set.
 
-MP3Quran exposes 114 downloadable surah-level MP3 files through its public API. The project owner has represented the recordings as public domain; the source pages and embedded metadata do not currently display a public-domain declaration. Before public distribution, retain attribution and archive written rights confirmation from the reciter or distributor.
+MP3Quran exposes 114 surah-level MP3 files through its public API. The project owner has represented the recordings as public domain; the source pages and embedded metadata do not currently display a public-domain declaration. This release therefore permits provider-hosted streaming only and fails new offline downloads closed. Do not enable offline copies or operate a redistribution mirror until written permission from the reciter or distributor is archived with the project.
 
 ## Amiri Quran font
 
