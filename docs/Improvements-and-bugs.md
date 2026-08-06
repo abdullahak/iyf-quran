@@ -1,8 +1,9 @@
 Improvements
 
-1. The Quran is in Arabic, so it reads from Right to left, this meanSwipe Left = going back in pages\
-   Swipe Right = going front in pag
-
+1. The Quran is in Arabic, so it reads from Right to left, this mean: Swipe Left = going back in pages\
+   Swipe Right = going front in pages
+2. You still didn't fix the height of the play banner when users are viewing it from the Home page, that's because the nav bar overlaps it.
+3. Reading Mushaf you did it poorly. I want it to view as much text as possible in a single view, not one ayah at a time. Also the swiping direction on it needs to be fixed.
 
 1. When audio is playing I'd like you to highlight the Ayah being recited even in the "Read" page
 2. The Navigation bar cuts into the Play banner. You fixed it when I'm in "Read" mode but not when I'm in the home, read, or listen pages. The entire Play banner needs to shift up above the Nav bar
