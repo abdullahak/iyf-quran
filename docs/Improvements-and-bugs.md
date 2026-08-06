@@ -11,4 +11,5 @@ Improvements
 2. When the audio ends for a Surah it continues to the next Surah but the "Open Reader" view just stops at the current Surah
 2. Let's add to the "Play Until" the option to go until End of Quran
 2. The Previous / Next buttons next to "Play" are grayed out. I want to be able to use them.
+2. When I click into "Open
 
