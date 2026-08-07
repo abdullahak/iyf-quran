@@ -1,0 +1,57 @@
+appId: com.abdlh.iyfquran
+name: Quran playback and Reading Mushaf stay together
+---
+- launchApp:
+    clearState: true
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible: 'Settings|الإعدادات'
+    timeout: 20000
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      text: '^Reading Mushaf,.*|^مصحف القراءة,.*'
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    text: '^Reading Mushaf,.*|^مصحف القراءة,.*'
+- tapOn:
+    id: tab-quran
+- extendedWaitUntil:
+    visible: '114 Surahs|١١٤ سورة'
+    timeout: 10000
+- tapOn:
+    id: play-surah-1
+- extendedWaitUntil:
+    visible:
+      id: player-bar-content
+    timeout: 30000
+- tapOn:
+    id: player-bar-content
+- extendedWaitUntil:
+    visible: 'Play until|تشغيل حتى'
+    timeout: 10000
+- assertVisible: 'Previous Surah|السورة السابقة'
+- assertVisible: 'Next Surah|السورة التالية'
+- takeScreenshot: quran-player-controls-enabled
+- scrollUntilVisible:
+    element:
+      text: 'Open Surah .* in the reader|فتح سورة .* في القارئ'
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    text: 'Open Surah .* in the reader|فتح سورة .* في القارئ'
+- extendedWaitUntil:
+    visible:
+      id: reading-mushaf-view
+    timeout: 10000
+- assertVisible:
+    id: '^reading-mushaf-section-1-1-.*$'
+- takeScreenshot: reading-mushaf-active-playback-highlight
+- tapOn: 'Close Mushaf page|إغلاق صفحة المصحف'
+- extendedWaitUntil:
+    visible: '114 Surahs|١١٤ سورة'
+    timeout: 10000
+- assertNotVisible: 'NOW PLAYING|قيد التشغيل الآن'
+- takeScreenshot: quran-after-reader-close

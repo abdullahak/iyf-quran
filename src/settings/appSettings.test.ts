@@ -11,6 +11,7 @@ describe('app settings', () => {
     expect(parseAppSettings(null)).toEqual(DEFAULT_APP_SETTINGS);
     expect(DEFAULT_APP_SETTINGS).toEqual({
       appearance: 'system',
+      language: 'system',
       reciterId: 'muhammad-al-faqih',
       readerMode: 'ayah',
     });
@@ -19,18 +20,22 @@ describe('app settings', () => {
   it('restores supported appearance, reciter, and reader choices', () => {
     expect(parseAppSettings(JSON.stringify({
       appearance: 'dark',
+      language: 'ar',
       reciterId: 'mishary-alafasi',
       readerMode: 'mushaf',
     }))).toEqual({
       appearance: 'dark',
+      language: 'ar',
       reciterId: 'mishary-alafasi',
       readerMode: 'mushaf',
     });
+    expect(parseAppSettings(JSON.stringify({ readerMode: 'classic' })).readerMode).toBe('classic');
   });
 
   it('falls back per field instead of accepting unknown persisted values', () => {
     expect(parseAppSettings(JSON.stringify({
       appearance: 'sepia',
+      language: 'french',
       reciterId: 'unknown',
       readerMode: 'translation',
     }))).toEqual(DEFAULT_APP_SETTINGS);

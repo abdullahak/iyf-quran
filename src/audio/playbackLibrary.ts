@@ -50,6 +50,33 @@ export function appendQueue(
   return [...queue, entry];
 }
 
+export type QueuePlaybackEvent =
+  | { type: 'enqueued' }
+  | { type: 'current-finished' }
+  | { type: 'entry-finished'; entryId: string };
+
+export type QueuePlaybackTransition =
+  | { action: 'wait'; queue: PlaybackQueueEntry[] }
+  | { action: 'play'; nextEntry: PlaybackQueueEntry; queue: PlaybackQueueEntry[] }
+  | { action: 'stop'; queue: [] };
+
+export function transitionQueuedPlayback(
+  queue: readonly PlaybackQueueEntry[],
+  event: QueuePlaybackEvent,
+): QueuePlaybackTransition {
+  const pending = [...queue];
+  if (event.type === 'enqueued') return { action: 'wait', queue: pending };
+  if (event.type === 'entry-finished') {
+    const completedIndex = pending.findIndex((entry) => entry.id === event.entryId);
+    if (completedIndex >= 0) pending.splice(completedIndex, 1);
+    if (pending.length === 0) return { action: 'stop', queue: [] };
+  }
+  const nextEntry = pending[0];
+  return nextEntry
+    ? { action: 'play', nextEntry, queue: pending }
+    : { action: 'wait', queue: pending };
+}
+
 export function removeQueueEntry(
   queue: readonly PlaybackQueueEntry[],
   id: string,

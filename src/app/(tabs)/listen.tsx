@@ -1,10 +1,12 @@
 import * as Haptics from 'expo-haptics';
-import { useState } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useQuranAudio } from '@/audio/AudioProvider';
+import { listenEntriesForPage, listenEntryForJuzSegment } from '@/audio/listenBrowse';
 import { useOfflineAudio } from '@/audio/OfflineAudioProvider';
+import type { PlaybackQueueEntry } from '@/audio/playbackLibrary';
 import {
   canStartOfflineDownload,
   offlineAudioAction,
@@ -14,16 +16,29 @@ import { isRecitationSelectionActive, recitationTrack, reciterById } from '@/aud
 import { Atmosphere } from '@/components/Atmosphere';
 import { AppSymbol } from '@/components/AppSymbol';
 import { ChapterRow } from '@/components/ChapterRow';
+import { QuranBrowseModeControl, type QuranBrowseMode } from '@/components/QuranBrowseModeControl';
+import { QuranSearchField } from '@/components/QuranSearchField';
 import { CHAPTERS } from '@/data/chapters';
+import { JUZ_SECTIONS, type JuzSection } from '@/data/juz';
+import { medinaPage } from '@/data/pages';
 import { useAppSettings } from '@/settings/AppSettingsProvider';
+import { useI18n } from '@/i18n/useI18n';
 import { useAppPalette } from '@/theme/useAppPalette';
+import { normalizeQuranSearch } from '@/utils/quranSearch';
 
 export default function ListenScreen() {
   const colors = useAppPalette();
+  const { isRTL, language, number: localizedNumber, t } = useI18n();
   const { settings } = useAppSettings();
   const selectedReciter = reciterById(settings.reciterId)!;
-  const { chapter: activeChapter, reciter: activeReciter, status, playChapter, toggle } = useQuranAudio();
+  const audio = useQuranAudio();
+  const { chapter: activeChapter, reciter: activeReciter, status, playChapter, toggle } = audio;
   const { cancelDownload, downloadSurahs, errors, progress, records, removeDownload } = useOfflineAudio();
+  const [browseMode, setBrowseMode] = useState<QuranBrowseMode>('surah');
+  const [query, setQuery] = useState('');
+  const [selectedJuz, setSelectedJuz] = useState<number>();
+  const [pageInput, setPageInput] = useState('1');
+  const [queueError, setQueueError] = useState<string>();
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [batchDownloading, setBatchDownloading] = useState(false);
   const downloadsAvailable = offlineDownloadsAvailable(Platform.OS, selectedReciter.supportsOffline);
@@ -40,6 +55,35 @@ export default function ListenScreen() {
     0,
   );
   const canStartSelection = canStartOfflineDownload(selectedNumbers.length, batchDownloading);
+  const selectedJuzSection = selectedJuz ? JUZ_SECTIONS[selectedJuz - 1] : undefined;
+  const requestedPage = Number(pageInput);
+  const pageValid = Boolean(medinaPage(requestedPage));
+  const chapters = useMemo(() => {
+    const normalized = normalizeQuranSearch(query);
+    if (!normalized) return [...CHAPTERS];
+    return CHAPTERS.filter((chapter) =>
+      normalizeQuranSearch(
+        `${chapter.number} ${chapter.englishName} ${chapter.arabicName}`,
+      ).includes(normalized),
+    );
+  }, [query]);
+
+  const selectMode = (mode: QuranBrowseMode) => {
+    setBrowseMode(mode);
+    setSelectedJuz(undefined);
+    setQuery('');
+    setQueueError(undefined);
+  };
+
+  const playSelection = async (entries: readonly PlaybackQueueEntry[]) => {
+    setQueueError(undefined);
+    try {
+      const started = await audio.playQueue(entries, 0);
+      if (!started) setQueueError(t('listen.queueUnavailable'));
+    } catch {
+      setQueueError(t('listen.queueUnavailable'));
+    }
+  };
 
   const toggleAlFatiha = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -51,7 +95,7 @@ export default function ListenScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top']}>
       <Atmosphere />
       <FlatList
-        data={CHAPTERS}
+        data={browseMode === 'surah' ? chapters : []}
         keyExtractor={(chapter) => String(chapter.number)}
         renderItem={({ item }) => {
           const active = isRecitationSelectionActive(
@@ -74,10 +118,10 @@ export default function ListenScreen() {
               subtitle={downloadsAvailable && errors[item.number]
                 ? errors[item.number]
                 : downloadsAvailable && downloaded
-                  ? `Downloaded · ${item.ayahCount} ayahs`
+                  ? t('listen.downloaded', { count: localizedNumber(item.ayahCount) })
                   : downloadsAvailable && downloading
-                    ? `Downloading ${Math.round((downloadProgress ?? 0) * 100)}%`
-                    : `Surah ${item.number} · ${item.ayahCount} ayahs`}
+                    ? t('listen.downloading', { percent: localizedNumber(Math.round((downloadProgress ?? 0) * 100)) })
+                    : t('listen.surahMeta', { number: localizedNumber(item.number), count: localizedNumber(item.ayahCount) })}
               onPress={() => {
                 if (active) toggle();
                 else playChapter(item);
@@ -86,12 +130,12 @@ export default function ListenScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={downloadAction === 'cancel'
-                    ? `Cancel download of Surah ${item.englishName}`
+                    ? t('downloads.cancelLabel', { surah: language === 'ar' ? item.arabicName.replace(/^سُورَةُ\s*/, '') : item.englishName })
                     : downloadAction === 'remove'
-                      ? `Remove downloaded Surah ${item.englishName}`
+                      ? t('downloads.removeLabel', { surah: language === 'ar' ? item.arabicName.replace(/^سُورَةُ\s*/, '') : item.englishName })
                       : isSelected
-                        ? `Remove Surah ${item.englishName} from download selection`
-                        : `Select Surah ${item.englishName} to download`}
+                        ? t('listen.removeSelection', { surah: language === 'ar' ? item.arabicName.replace(/^سُورَةُ\s*/, '') : item.englishName })
+                        : t('listen.selectDownload', { surah: language === 'ar' ? item.arabicName.replace(/^سُورَةُ\s*/, '') : item.englishName })}
                   accessibilityState={{ selected: isSelected || Boolean(downloaded) }}
                   hitSlop={6}
                   onPress={(event) => {
@@ -128,11 +172,16 @@ export default function ListenScreen() {
           <View style={[styles.separator, { backgroundColor: colors.border }]} />
         )}
         contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Listen</Text>
+            <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{t('listen.title')}</Text>
+            <QuranBrowseModeControl mode={browseMode} onChange={selectMode} />
+            {browseMode === 'surah' ? (
+              <QuranSearchField value={query} onChangeText={setQuery} />
+            ) : null}
 
             <View style={[styles.reciterIdentity, { borderBottomColor: colors.border }]}>
               <View style={styles.reciterCopy}>
@@ -143,11 +192,11 @@ export default function ListenScreen() {
                   {selectedReciter.arabicName}
                 </Text>
                 <Text style={[styles.reciterName, { color: colors.text }]}>{selectedReciter.name}</Text>
-                <Text style={[styles.reciterMeta, { color: colors.textMuted }]}>Hafs ‘an ‘Asim · 114 surahs</Text>
+                <Text style={[styles.reciterMeta, { color: colors.textMuted }]}>{t('listen.reciterMeta')}</Text>
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={alFatihaPlaying ? 'Pause Al-Faatiha' : 'Play Al-Faatiha'}
+                accessibilityLabel={alFatihaPlaying ? t('listen.pauseFatiha') : t('listen.playFatiha')}
                 accessibilityState={{ selected: alFatihaPlaying }}
                 onPress={toggleAlFatiha}
                 style={({ pressed }) => [
@@ -167,11 +216,20 @@ export default function ListenScreen() {
               </Pressable>
             </View>
 
-            {downloadsAvailable ? (
+            {queueError ? (
+              <Text
+                accessibilityLiveRegion="assertive"
+                style={[styles.queueError, { color: colors.danger, borderColor: colors.danger }]}
+              >
+                {queueError}
+              </Text>
+            ) : null}
+
+            {browseMode === 'surah' && downloadsAvailable ? (
               <View style={[styles.downloadPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={styles.downloadCopy}>
-                  <Text style={[styles.downloadTitle, { color: colors.text }]}>Offline listening</Text>
-                  <Text style={[styles.downloadMeta, { color: colors.textMuted }]}>Select individual Surahs. Each download is verified for offline use; iOS may remove it when storage is low.</Text>
+                  <Text style={[styles.downloadTitle, { color: colors.text }]}>{t('listen.offlineTitle')}</Text>
+                  <Text style={[styles.downloadMeta, { color: colors.textMuted }]}>{t('listen.offlineBody')}</Text>
                 </View>
                 <Pressable
                   disabled={!canStartSelection}
@@ -195,20 +253,119 @@ export default function ListenScreen() {
                   <AppSymbol name="download" size={16} tintColor={canStartSelection ? colors.onPrimary : colors.textFaint} />
                   <Text style={[styles.downloadSelectedText, { color: canStartSelection ? colors.onPrimary : colors.textFaint }]}>
                     {batchDownloading
-                      ? 'Downloading selection…'
+                      ? t('listen.downloadingSelection')
                       : selectedNumbers.length
-                        ? `Download ${selectedNumbers.length} · ${(selectedBytes / 1_000_000).toFixed(0)} MB`
-                        : 'Select Surahs'}
+                        ? t('listen.downloadSelection', { count: localizedNumber(selectedNumbers.length), size: localizedNumber(Math.round(selectedBytes / 1_000_000)) })
+                        : t('listen.selectSurahs')}
                   </Text>
                 </Pressable>
               </View>
             ) : null}
 
-            <Text accessibilityRole="header" style={[styles.listTitle, { color: colors.text }]}>Surahs</Text>
+            {browseMode === 'surah' ? (
+              <Text accessibilityRole="header" style={[styles.listTitle, { color: colors.text }]}>{t('common.surahs')}</Text>
+            ) : null}
           </View>
         }
+        ListEmptyComponent={browseMode === 'surah' ? (
+          <View style={styles.empty}>
+            <AppSymbol name="search" size={28} tintColor={colors.textFaint} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('read.noSurah')}</Text>
+            <Text style={[styles.emptyBody, { color: colors.textMuted }]}>{t('read.tryAnother')}</Text>
+          </View>
+        ) : browseMode === 'juz' ? (
+          <View style={styles.modeContent}>
+            {!selectedJuzSection ? (
+              <>
+                <Text style={[styles.modeMeta, { color: colors.textMuted }]}>{t('read.canonicalJuz')}</Text>
+                {JUZ_SECTIONS.map((section) => (
+                  <JuzListenRow key={section.juz} section={section} onPress={() => setSelectedJuz(section.juz)} />
+                ))}
+              </>
+            ) : (
+              <>
+                <Pressable accessibilityRole="button" onPress={() => setSelectedJuz(undefined)} style={styles.juzBack}>
+                  <AppSymbol name={isRTL ? 'forward' : 'back'} size={14} tintColor={colors.primary} />
+                  <View>
+                    <Text style={[styles.juzBackTitle, { color: colors.text }]}>{t('common.juz', { number: localizedNumber(selectedJuzSection.juz) })}</Text>
+                    <Text style={[styles.juzBackMeta, { color: colors.textMuted }]}>{t('read.allJuz')}</Text>
+                  </View>
+                </Pressable>
+                {selectedJuzSection.segments.map((segment) => (
+                  <View key={segment.key}>
+                    <ChapterRow
+                      action="play"
+                      chapter={segment.chapter}
+                      startAyah={segment.startAyah}
+                      subtitle={segment.startAyah === 1 && segment.endAyah === segment.chapter.ayahCount
+                        ? t('common.wholeSurah', { count: localizedNumber(segment.chapter.ayahCount) })
+                        : t('common.ayahRange', { start: localizedNumber(segment.startAyah), end: localizedNumber(segment.endAyah) })}
+                      onPress={() => void playSelection([listenEntryForJuzSegment(selectedJuzSection.juz, segment)])}
+                    />
+                    <View style={[styles.separator, { backgroundColor: colors.border }]} />
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+        ) : browseMode === 'page' ? (
+          <View style={styles.modeContent}>
+            <View style={[styles.pageJump, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.pageJumpTitle, { color: colors.text }]}>{t('listen.pageTitle')}</Text>
+              <Text style={[styles.pageJumpBody, { color: colors.textMuted }]}>{t('read.pageBody')}</Text>
+              <View style={styles.pageJumpControls}>
+                <TextInput
+                  value={pageInput}
+                  onChangeText={setPageInput}
+                  keyboardType="number-pad"
+                  returnKeyType="go"
+                  accessibilityLabel={t('read.pageInput')}
+                  onSubmitEditing={() => {
+                    if (pageValid) void playSelection(listenEntriesForPage(requestedPage));
+                  }}
+                  style={[styles.pageInput, { color: colors.text, borderColor: pageValid ? colors.border : colors.danger }]}
+                />
+                <Pressable
+                  disabled={!pageValid}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !pageValid }}
+                  onPress={() => void playSelection(listenEntriesForPage(requestedPage))}
+                  style={[styles.playPageButton, { backgroundColor: colors.primary, opacity: pageValid ? 1 : 0.35 }]}
+                >
+                  <AppSymbol name="play" size={16} tintColor={colors.onPrimary} />
+                  <Text style={[styles.playPageText, { color: colors.onPrimary }]}>{t('listen.playPage')}</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        ) : null}
       />
     </SafeAreaView>
+  );
+}
+
+function JuzListenRow({ section, onPress }: { section: JuzSection; onPress: () => void }) {
+  const colors = useAppPalette();
+  const { isRTL, number: localizedNumber, t } = useI18n();
+  const uniqueSurahs = new Set(section.segments.map((segment) => segment.chapter.number)).size;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={t('read.openJuz', { juz: localizedNumber(section.juz), count: localizedNumber(uniqueSurahs) })}
+      onPress={onPress}
+      style={({ pressed }) => [styles.juzRow, { backgroundColor: pressed ? colors.primarySoft : 'transparent' }]}
+    >
+      <View style={[styles.juzNumber, { backgroundColor: colors.primarySoft }]}>
+        <Text style={[styles.juzNumberText, { color: colors.primary }]}>{localizedNumber(section.juz)}</Text>
+      </View>
+      <View style={styles.juzCopy}>
+        <Text style={[styles.juzTitle, { color: colors.text }]}>{t('common.juz', { number: localizedNumber(section.juz) })}</Text>
+        <Text style={[styles.juzMeta, { color: colors.textMuted }]}>
+          {t('read.juzMeta', { count: localizedNumber(uniqueSurahs), first: `${localizedNumber(section.first[0])}:${localizedNumber(section.first[1])}`, last: `${localizedNumber(section.last[0])}:${localizedNumber(section.last[1])}` })}
+        </Text>
+      </View>
+      <AppSymbol name={isRTL ? 'back' : 'forward'} size={15} tintColor={colors.textFaint} />
+    </Pressable>
   );
 }
 
@@ -241,6 +398,15 @@ const styles = StyleSheet.create({
   },
   reciterName: { marginTop: 5, fontSize: 17, lineHeight: 22, fontWeight: '600' },
   reciterMeta: { marginTop: 4, fontSize: 13, lineHeight: 18 },
+  queueError: {
+    marginTop: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    lineHeight: 19,
+  },
   reciterControl: {
     width: 48,
     height: 48,
@@ -279,5 +445,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: -0.3,
   },
+  modeContent: { paddingTop: 10, paddingBottom: 40 },
+  modeMeta: { paddingHorizontal: 4, paddingVertical: 10, fontSize: 12, lineHeight: 17, fontWeight: '500' },
+  juzRow: { minHeight: 72, borderRadius: 12, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center' },
+  juzNumber: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  juzNumberText: { fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  juzCopy: { flex: 1, marginStart: 13 },
+  juzTitle: { fontSize: 16, lineHeight: 21, fontWeight: '600' },
+  juzMeta: { marginTop: 2, fontSize: 11, lineHeight: 16 },
+  juzBack: { minHeight: 66, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  juzBackTitle: { fontSize: 17, lineHeight: 22, fontWeight: '600' },
+  juzBackMeta: { fontSize: 11, lineHeight: 15 },
+  pageJump: { marginTop: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 17, padding: 20 },
+  pageJumpTitle: { fontSize: 18, lineHeight: 24, fontWeight: '600' },
+  pageJumpBody: { marginTop: 5, fontSize: 13, lineHeight: 19 },
+  pageJumpControls: { marginTop: 18, flexDirection: 'row', gap: 10 },
+  pageInput: { width: 92, height: 48, borderWidth: StyleSheet.hairlineWidth, borderRadius: 13, paddingHorizontal: 14, fontSize: 17, fontVariant: ['tabular-nums'] },
+  playPageButton: { flex: 1, height: 48, borderRadius: 13, flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center' },
+  playPageText: { fontSize: 14, lineHeight: 19, fontWeight: '700' },
   separator: { height: StyleSheet.hairlineWidth, marginStart: 56, marginEnd: 10 },
+  empty: { paddingVertical: 78, alignItems: 'center' },
+  emptyTitle: { marginTop: 14, fontSize: 17, fontWeight: '600' },
+  emptyBody: { marginTop: 5, fontSize: 13 },
 });

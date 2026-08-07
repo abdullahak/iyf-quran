@@ -64,3 +64,15 @@ export const JUZ_SECTIONS: readonly JuzSection[] = Array.from(
     };
   },
 );
+
+export function juzForAyah(surah: number, ayah: number): number | undefined {
+  const chapter = chapterByNumber(surah);
+  if (!chapter || !Number.isInteger(ayah) || ayah < 1 || ayah > chapter.ayahCount) {
+    return undefined;
+  }
+  return JUZ_SECTIONS.find((section) => section.segments.some((segment) => (
+    segment.chapter.number === surah
+      && ayah >= segment.startAyah
+      && ayah <= segment.endAyah
+  )))?.juz;
+}

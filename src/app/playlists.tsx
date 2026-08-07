@@ -7,11 +7,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePlaybackLibrary } from '@/audio/PlaybackLibraryProvider';
 import { AppSymbol } from '@/components/AppSymbol';
 import { IconButton } from '@/components/IconButton';
+import { useI18n } from '@/i18n/useI18n';
 import { useAppPalette } from '@/theme/useAppPalette';
 import { radius } from '@/theme/tokens';
 
 export default function PlaylistsScreen() {
   const colors = useAppPalette();
+  const { isRTL, number: localizedNumber, t } = useI18n();
   const router = useRouter();
   const { createPlaylist, deletePlaylist, playlists } = usePlaybackLibrary();
   const [name, setName] = useState('');
@@ -29,19 +31,19 @@ export default function PlaylistsScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.navigation}>
-        <IconButton name="close" label="Close playlists" onPress={close} />
-        <Text accessibilityRole="header" style={[styles.navTitle, { color: colors.text }]}>Playlists</Text>
+        <IconButton name="close" label={t('playlists.close')} onPress={close} />
+        <Text accessibilityRole="header" style={[styles.navTitle, { color: colors.text }]}>{t('playlists.title')}</Text>
         <View style={styles.navigationEnd} />
       </View>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <Text style={[styles.heading, { color: colors.text }]}>Create a playlist</Text>
-        <Text style={[styles.intro, { color: colors.textMuted }]}>Arrange Surahs and Ayahs into a listening sequence. Add items from Read or the Mushaf.</Text>
+        <Text style={[styles.heading, { color: colors.text }]}>{t('playlists.create')}</Text>
+        <Text style={[styles.intro, { color: colors.textMuted }]}>{t('playlists.intro')}</Text>
         <View style={styles.createRow}>
           <TextInput
             value={name}
             onChangeText={setName}
-            accessibilityLabel="Playlist name"
-            placeholder="Playlist name"
+            accessibilityLabel={t('playlists.name')}
+            placeholder={t('playlists.name')}
             placeholderTextColor={colors.textFaint}
             returnKeyType="done"
             onSubmitEditing={submit}
@@ -50,7 +52,7 @@ export default function PlaylistsScreen() {
           <Pressable
             disabled={!normalizedName}
             accessibilityRole="button"
-            accessibilityLabel="Create playlist"
+            accessibilityLabel={t('playlists.createAction')}
             accessibilityState={{ disabled: !normalizedName }}
             onPress={submit}
             style={[styles.createButton, { backgroundColor: colors.primary, opacity: normalizedName ? 1 : 0.35 }]}
@@ -59,13 +61,13 @@ export default function PlaylistsScreen() {
           </Pressable>
         </View>
 
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Your playlists</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('playlists.yours')}</Text>
         {playlists.length > 0 ? playlists.map((playlist, index) => (
           <View key={playlist.id}>
             <View style={styles.playlistRow}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Open playlist ${playlist.name}`}
+                accessibilityLabel={t('playlists.open', { name: playlist.name })}
                 onPress={() => router.push({ pathname: '/playlist/[id]', params: { id: playlist.id } })}
                 style={({ pressed }) => [styles.playlistMain, { backgroundColor: pressed ? colors.primarySoft : 'transparent' }]}
               >
@@ -75,14 +77,14 @@ export default function PlaylistsScreen() {
                 <View style={styles.playlistCopy}>
                   <Text style={[styles.playlistName, { color: colors.text }]}>{playlist.name}</Text>
                   <Text style={[styles.playlistMeta, { color: colors.textMuted }]}>
-                    {playlist.items.length === 1 ? '1 item' : `${playlist.items.length} items`}
+                    {playlist.items.length === 1 ? t('common.oneItem') : t('common.items', { count: localizedNumber(playlist.items.length) })}
                   </Text>
                 </View>
-                <AppSymbol name="forward" size={15} tintColor={colors.textFaint} />
+                <AppSymbol name={isRTL ? 'back' : 'forward'} size={15} tintColor={colors.textFaint} />
               </Pressable>
               <IconButton
                 name="trash"
-                label={`Delete playlist ${playlist.name}`}
+                label={t('playlists.delete', { name: playlist.name })}
                 onPress={() => deletePlaylist(playlist.id)}
               />
             </View>
@@ -91,8 +93,8 @@ export default function PlaylistsScreen() {
         )) : (
           <View style={styles.empty}>
             <AppSymbol name="queue" size={26} tintColor={colors.textFaint} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No playlists yet</Text>
-            <Text style={[styles.emptyBody, { color: colors.textMuted }]}>Create one here, then add Quran ranges while reading.</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('playlists.empty')}</Text>
+            <Text style={[styles.emptyBody, { color: colors.textMuted }]}>{t('playlists.emptyBody')}</Text>
           </View>
         )}
       </ScrollView>

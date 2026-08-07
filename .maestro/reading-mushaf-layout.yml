@@ -1,0 +1,86 @@
+appId: com.abdlh.iyfquran
+name: Responsive Reading Mushaf fits portrait and landscape
+---
+- launchApp:
+    clearState: true
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible: 'Settings|الإعدادات'
+    timeout: 20000
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      text: '^Reading Mushaf,.*|^مصحف القراءة,.*'
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    text: '^Reading Mushaf,.*|^مصحف القراءة,.*'
+- tapOn:
+    id: tab-quran
+- extendedWaitUntil:
+    visible: '114 Surahs|١١٤ سورة'
+    timeout: 10000
+- tapOn:
+    text: '^Page$|^صفحة$'
+- tapOn:
+    text: '^Open page$|^فتح الصفحة$'
+- extendedWaitUntil:
+    visible:
+      id: reading-mushaf-view
+    timeout: 10000
+- assertVisible:
+    id: '^reading-mushaf-section-2-1-.*$'
+- takeScreenshot: reading-mushaf-page-1-portrait
+- openLink: iyfquran://mushaf/48?focus=2%3A282
+- tapOn:
+    text: '^Open$'
+    optional: true
+- extendedWaitUntil:
+    visible: '^Page 48$|^الصفحة ٤٨$'
+    timeout: 10000
+- assertVisible:
+    id: '^reading-mushaf-section-2-282-282$'
+- takeScreenshot: reading-mushaf-longest-ayah-portrait
+- setOrientation: LANDSCAPE_LEFT
+- extendedWaitUntil:
+    visible:
+      id: reading-mushaf-view
+    timeout: 10000
+- assertVisible:
+    id: '^reading-mushaf-section-2-282-282$'
+- takeScreenshot: reading-mushaf-longest-ayah-landscape
+- setOrientation: PORTRAIT
+- openLink: iyfquran://mushaf/50?focus=3%3A1
+- tapOn:
+    text: '^Open$'
+    optional: true
+- extendedWaitUntil:
+    visible: '^Page 50$|^الصفحة ٥٠$'
+    timeout: 10000
+- assertVisible:
+    id: '^reading-mushaf-section-3-1-.*$'
+- swipe:
+    from:
+      id: reading-mushaf-view
+    direction: LEFT
+    duration: 500
+    waitToSettleTimeoutMs: 3000
+- extendedWaitUntil:
+    visible: '^Page 49$|^الصفحة ٤٩$'
+    timeout: 10000
+- assertVisible:
+    id: '^reading-mushaf-section-2-.*-286$'
+- takeScreenshot: reading-mushaf-before-surah-3
+- swipe:
+    from:
+      id: reading-mushaf-view
+    direction: RIGHT
+    duration: 500
+    waitToSettleTimeoutMs: 3000
+- extendedWaitUntil:
+    visible: '^Page 50$|^الصفحة ٥٠$'
+    timeout: 10000
+- assertVisible:
+    id: '^reading-mushaf-section-3-1-.*$'
+- takeScreenshot: reading-mushaf-surah-3-round-trip

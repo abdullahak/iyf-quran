@@ -5,37 +5,96 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { usePlaybackLibrary } from '@/audio/PlaybackLibraryProvider';
+import { createQueueEntry } from '@/audio/playbackLibrary';
 import { AppSymbol } from '@/components/AppSymbol';
 import { IconButton } from '@/components/IconButton';
 import { chapterByNumber } from '@/data/chapters';
+import { useI18n } from '@/i18n/useI18n';
 import { useAppPalette } from '@/theme/useAppPalette';
 import { radius } from '@/theme/tokens';
 
-export default function AddToPlaylistScreen() {
-  const params = useLocalSearchParams<{
-    surah: string | string[];
-    start?: string | string[];
-    end?: string | string[];
-  }>();
-  const surah = Number(Array.isArray(params.surah) ? params.surah[0] : params.surah);
-  const startAyah = Number(Array.isArray(params.start) ? params.start[0] : params.start) || 1;
+type SelectionParams = {
+  surah: string | string[];
+  start?: string | string[];
+  end?: string | string[];
+};
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function canonicalPositiveInteger(
+  value: string | string[] | undefined,
+  fallback?: number,
+) {
+  const raw = firstParam(value);
+  if (raw === undefined) return fallback;
+  if (!/^[1-9]\d*$/.test(raw)) return undefined;
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+function validSelection(params: SelectionParams) {
+  const surah = canonicalPositiveInteger(params.surah);
+  if (surah === undefined) return undefined;
   const chapter = chapterByNumber(surah);
-  const endAyah = Number(Array.isArray(params.end) ? params.end[0] : params.end) || chapter?.ayahCount || 1;
+  if (!chapter) return undefined;
+  const startAyah = canonicalPositiveInteger(params.start, 1);
+  const endAyah = canonicalPositiveInteger(params.end, chapter.ayahCount);
+  if (startAyah === undefined || endAyah === undefined) return undefined;
+  try {
+    const entry = createQueueEntry(surah, startAyah, endAyah, 'add-to-playlist-route');
+    return { chapter, ...entry };
+  } catch {
+    return undefined;
+  }
+}
+
+export default function AddToPlaylistScreen() {
+  const params = useLocalSearchParams<SelectionParams>();
+  const selection = validSelection(params);
   const colors = useAppPalette();
+  const { language, number: localizedNumber, t } = useI18n();
   const router = useRouter();
   const { addRangeToPlaylist, createPlaylistWithRange, playlists } = usePlaybackLibrary();
   const [name, setName] = useState('');
   const close = () => (router.canDismiss() ? router.dismiss() : router.canGoBack() ? router.back() : router.replace('/'));
 
+  if (!selection) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+        <View style={styles.navigation}>
+          <IconButton name="close" label={t('common.close')} onPress={close} />
+          <Text accessibilityRole="header" style={[styles.navTitle, { color: colors.text }]}>{t('playlist.addTitle')}</Text>
+          <View style={styles.navigationEnd} />
+        </View>
+        <View style={styles.invalidSelection}>
+          <AppSymbol name="wifiError" size={24} tintColor={colors.gold} />
+          <Text style={[styles.invalidSelectionText, { color: colors.text }]}>{t('playlist.invalidSelection')}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const add = (playlistId: string) => {
-    addRangeToPlaylist(playlistId, surah, startAyah, endAyah);
+    addRangeToPlaylist(
+      playlistId,
+      selection.surah,
+      selection.startAyah,
+      selection.endAyah,
+    );
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     close();
   };
 
   const createAndAdd = () => {
     if (!name.trim()) return;
-    createPlaylistWithRange(name, surah, startAyah, endAyah);
+    createPlaylistWithRange(
+      name,
+      selection.surah,
+      selection.startAyah,
+      selection.endAyah,
+    );
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     close();
   };
@@ -43,26 +102,24 @@ export default function AddToPlaylistScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.navigation}>
-        <IconButton name="close" label="Close" onPress={close} />
-        <Text accessibilityRole="header" style={[styles.navTitle, { color: colors.text }]}>Add to Playlist</Text>
+        <IconButton name="close" label={t('common.close')} onPress={close} />
+        <Text accessibilityRole="header" style={[styles.navTitle, { color: colors.text }]}>{t('playlist.addTitle')}</Text>
         <View style={styles.navigationEnd} />
       </View>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {chapter ? (
-          <View style={styles.selection}>
-            <Text style={[styles.selectionTitle, { color: colors.text }]}>{chapter.englishName}</Text>
-            <Text style={[styles.selectionMeta, { color: colors.textMuted }]}>
-              {startAyah === 1 && endAyah === chapter.ayahCount ? `Surah ${surah}` : startAyah === endAyah ? `Ayah ${startAyah}` : `Ayahs ${startAyah}–${endAyah}`}
-            </Text>
-          </View>
-        ) : null}
+        <View style={styles.selection}>
+          <Text style={[styles.selectionTitle, { color: colors.text }]}>{language === 'ar' ? selection.chapter.arabicName.replace(/^سُورَةُ\s*/, '') : selection.chapter.englishName}</Text>
+          <Text style={[styles.selectionMeta, { color: colors.textMuted }]}>
+            {selection.startAyah === 1 && selection.endAyah === selection.chapter.ayahCount ? t('common.surahNumber', { number: localizedNumber(selection.surah) }) : selection.startAyah === selection.endAyah ? t('common.ayah', { number: localizedNumber(selection.startAyah) }) : t('common.ayahRange', { start: localizedNumber(selection.startAyah), end: localizedNumber(selection.endAyah) })}
+          </Text>
+        </View>
 
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Choose a playlist</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('playlist.choose')}</Text>
         {playlists.map((playlist, index) => (
           <View key={playlist.id}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Add to ${playlist.name}`}
+              accessibilityLabel={t('playlist.addTo', { name: playlist.name })}
               onPress={() => add(playlist.id)}
               style={({ pressed }) => [styles.row, { backgroundColor: pressed ? colors.primarySoft : 'transparent' }]}
             >
@@ -71,7 +128,7 @@ export default function AddToPlaylistScreen() {
               </View>
               <View style={styles.rowCopy}>
                 <Text style={[styles.rowTitle, { color: colors.text }]}>{playlist.name}</Text>
-                <Text style={[styles.rowMeta, { color: colors.textMuted }]}>{playlist.items.length === 1 ? '1 item' : `${playlist.items.length} items`}</Text>
+                <Text style={[styles.rowMeta, { color: colors.textMuted }]}>{playlist.items.length === 1 ? t('common.oneItem') : t('common.items', { count: localizedNumber(playlist.items.length) })}</Text>
               </View>
               <AppSymbol name="add" size={17} tintColor={colors.primary} />
             </Pressable>
@@ -79,13 +136,13 @@ export default function AddToPlaylistScreen() {
           </View>
         ))}
 
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>New playlist</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('playlist.new')}</Text>
         <View style={styles.createRow}>
           <TextInput
             value={name}
             onChangeText={setName}
-            accessibilityLabel="New playlist name"
-            placeholder="Playlist name"
+            accessibilityLabel={t('playlist.newName')}
+            placeholder={t('playlists.name')}
             placeholderTextColor={colors.textFaint}
             returnKeyType="done"
             onSubmitEditing={createAndAdd}
@@ -94,7 +151,7 @@ export default function AddToPlaylistScreen() {
           <Pressable
             disabled={!name.trim()}
             accessibilityRole="button"
-            accessibilityLabel="Create playlist and add selection"
+            accessibilityLabel={t('playlist.createAdd')}
             accessibilityState={{ disabled: !name.trim() }}
             onPress={createAndAdd}
             style={[styles.createButton, { backgroundColor: colors.primary, opacity: name.trim() ? 1 : 0.35 }]}
@@ -112,6 +169,8 @@ const styles = StyleSheet.create({
   navigation: { height: 58, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center' },
   navTitle: { flex: 1, textAlign: 'center', fontSize: 16, lineHeight: 21, fontWeight: '600' },
   navigationEnd: { width: 44 },
+  invalidSelection: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 24 },
+  invalidSelectionText: { maxWidth: 300, fontSize: 15, lineHeight: 22, fontWeight: '600', textAlign: 'center' },
   content: { width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 20, paddingBottom: 70 },
   selection: { paddingTop: 18, paddingBottom: 6 },
   selectionTitle: { fontSize: 22, lineHeight: 28, fontWeight: '600' },

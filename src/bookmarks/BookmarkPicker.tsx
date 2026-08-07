@@ -22,6 +22,7 @@ import { AppSymbol } from '@/components/AppSymbol';
 import { Atmosphere } from '@/components/Atmosphere';
 import { IconButton } from '@/components/IconButton';
 import { CHAPTERS, type Chapter } from '@/data/chapters';
+import { useI18n } from '@/i18n/useI18n';
 import { radius } from '@/theme/tokens';
 import { useAppPalette } from '@/theme/useAppPalette';
 import { normalizeQuranSearch } from '@/utils/quranSearch';
@@ -37,6 +38,7 @@ function toArabicIndic(value: number) {
 
 export function BookmarkPicker({ visible, onClose }: Props) {
   const colors = useAppPalette();
+  const { isRTL, language, number: localizedNumber, t } = useI18n();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const [query, setQuery] = useState('');
   const [chapter, setChapter] = useState<Chapter>();
@@ -80,13 +82,13 @@ export function BookmarkPicker({ visible, onClose }: Props) {
         <Atmosphere />
         <View style={styles.navigation}>
           <IconButton
-            name={chapter ? 'back' : 'close'}
-            label={chapter ? 'Choose another surah' : 'Close bookmark picker'}
+            name={chapter ? (isRTL ? 'forward' : 'back') : 'close'}
+            label={chapter ? t('bookmarkPicker.otherSurah') : t('bookmarkPicker.close')}
             onPress={() => (chapter ? setChapter(undefined) : dismiss())}
           />
           <View style={styles.navigationTitle}>
-            <Text style={[styles.navTitle, { color: colors.text }]}>Add Bookmark</Text>
-            <Text style={[styles.navMeta, { color: colors.textMuted }]}>Choose a surah or ayah</Text>
+            <Text style={[styles.navTitle, { color: colors.text }]}>{t('bookmarkPicker.title')}</Text>
+            <Text style={[styles.navMeta, { color: colors.textMuted }]}>{t('bookmarkPicker.subtitle')}</Text>
           </View>
           <View style={styles.navigationSpacer} />
         </View>
@@ -109,16 +111,16 @@ export function BookmarkPicker({ visible, onClose }: Props) {
                     {chapter.englishName}
                   </Text>
                   <Text style={[styles.selectedMeta, { color: colors.textMuted }]}>
-                    Surah {chapter.number} · {chapter.ayahCount} ayahs
+                    {t('bookmarkPicker.meta', { number: localizedNumber(chapter.number), count: localizedNumber(chapter.ayahCount) })}
                   </Text>
                 </View>
                 <BookmarkChoice
-                  label="Whole surah"
-                  meta={`Return to the beginning of ${chapter.englishName}`}
+                  label={t('bookmarkPicker.whole')}
+                  meta={t('bookmarkPicker.returnStart', { surah: language === 'ar' ? chapter.arabicName.replace(/^سُورَةُ\s*/, '') : chapter.englishName })}
                   saved={isBookmarked(makeSurahTarget(chapter.number).key)}
                   onPress={() => save(makeSurahTarget(chapter.number))}
                 />
-                <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>Ayahs</Text>
+                <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>{t('bookmarkPicker.ayahs')}</Text>
               </View>
             }
             renderItem={({ item: ayah }) => {
@@ -126,8 +128,8 @@ export function BookmarkPicker({ visible, onClose }: Props) {
               return (
                 <BookmarkChoice
                   arabicLabel={`آية ${toArabicIndic(ayah)}`}
-                  label={`Ayah ${ayah}`}
-                  meta={`${chapter.englishName} · ${target.key}`}
+                  label={t('common.ayah', { number: localizedNumber(ayah) })}
+                  meta={language === 'ar' ? chapter.arabicName.replace(/^سُورَةُ\s*/, '') : chapter.englishName}
                   saved={isBookmarked(target.key)}
                   onPress={() => save(target)}
                 />
@@ -144,11 +146,11 @@ export function BookmarkPicker({ visible, onClose }: Props) {
               <View style={[styles.search, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <AppSymbol name="search" size={18} tintColor={colors.textMuted} />
                 <TextInput
-                  accessibilityLabel="Search surahs to bookmark"
+                  accessibilityLabel={t('bookmarkPicker.searchLabel')}
                   autoCorrect={false}
                   clearButtonMode="while-editing"
                   onChangeText={setQuery}
-                  placeholder="Search surahs"
+                  placeholder={t('bookmarkPicker.searchPlaceholder')}
                   placeholderTextColor={colors.textFaint}
                   returnKeyType="search"
                   style={[styles.searchInput, { color: colors.text }]}
@@ -158,14 +160,14 @@ export function BookmarkPicker({ visible, onClose }: Props) {
             }
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>No surah found</Text>
-                <Text style={[styles.emptyBody, { color: colors.textMuted }]}>Try another name or number.</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('bookmarkPicker.none')}</Text>
+                <Text style={[styles.emptyBody, { color: colors.textMuted }]}>{t('bookmarkPicker.noneBody')}</Text>
               </View>
             }
             renderItem={({ item }) => (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Choose Surah ${item.englishName}`}
+                accessibilityLabel={t('bookmarkPicker.choose', { surah: language === 'ar' ? item.arabicName.replace(/^سُورَةُ\s*/, '') : item.englishName })}
                 onPress={() => {
                   void Haptics.selectionAsync();
                   setChapter(item);
@@ -176,12 +178,12 @@ export function BookmarkPicker({ visible, onClose }: Props) {
                 ]}
               >
                 <Text style={[styles.chapterNumber, { color: colors.textFaint }]}>
-                  {String(item.number).padStart(2, '0')}
+                  {localizedNumber(item.number)}
                 </Text>
                 <View style={styles.chapterCopy}>
                   <Text style={[styles.chapterEnglish, { color: colors.text }]}>{item.englishName}</Text>
                   <Text style={[styles.chapterMeta, { color: colors.textMuted }]}>
-                    Surah {item.number} · {item.ayahCount} ayahs
+                    {t('bookmarkPicker.meta', { number: localizedNumber(item.number), count: localizedNumber(item.ayahCount) })}
                   </Text>
                 </View>
                 <Text
@@ -213,10 +215,11 @@ type ChoiceProps = {
 
 function BookmarkChoice({ label, arabicLabel, meta, saved, onPress }: ChoiceProps) {
   const colors = useAppPalette();
+  const { t } = useI18n();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={saved ? `${label}, already bookmarked` : `Bookmark ${label}`}
+      accessibilityLabel={saved ? t('bookmarkPicker.savedLabel', { label }) : t('bookmarkPicker.saveLabel', { label })}
       accessibilityState={{ disabled: saved, selected: saved }}
       disabled={saved}
       onPress={onPress}
@@ -234,7 +237,7 @@ function BookmarkChoice({ label, arabicLabel, meta, saved, onPress }: ChoiceProp
             </Text>
           ) : null}
         </View>
-        <Text style={[styles.choiceMeta, { color: colors.textMuted }]}>{saved ? 'Saved' : meta}</Text>
+        <Text style={[styles.choiceMeta, { color: colors.textMuted }]}>{saved ? t('common.saved') : meta}</Text>
       </View>
       <View style={[styles.choiceIcon, saved && { backgroundColor: colors.primarySoft }]}>
         <AppSymbol

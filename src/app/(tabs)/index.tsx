@@ -10,12 +10,15 @@ import { AppSymbol } from '@/components/AppSymbol';
 import { IconButton } from '@/components/IconButton';
 import { chapterByNumber } from '@/data/chapters';
 import { useReadingHistory } from '@/reader/ReadingHistoryProvider';
+import { readingRouteForPosition } from '@/reader/readingRoute';
 import { useAppSettings } from '@/settings/AppSettingsProvider';
+import { useI18n } from '@/i18n/useI18n';
 import { useAppPalette } from '@/theme/useAppPalette';
 import { radius, shadow } from '@/theme/tokens';
 
 export default function HomeScreen() {
   const colors = useAppPalette();
+  const { isRTL, number: localizedNumber, t, tCount } = useI18n();
   const router = useRouter();
   const { bookmarks } = useBookmarks();
   const { playlists } = usePlaybackLibrary();
@@ -41,10 +44,10 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.content}>
-          <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Quran</Text>
+          <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{t('home.title')}</Text>
 
           <View style={styles.section}>
-            <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>Recent pages</Text>
+            <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>{t('home.recentPages')}</Text>
             {recentPages.length > 0 ? (
               <ScrollView
                 horizontal
@@ -57,17 +60,15 @@ export default function HomeScreen() {
                     <Pressable
                       key={recent.page}
                       accessibilityRole="button"
-                      accessibilityLabel={`Open page ${recent.page}, Surah ${chapter.englishName}, Ayah ${recent.ayah}`}
+                      accessibilityLabel={t('home.openPage', { page: localizedNumber(recent.page), surah: chapter.englishName, ayah: localizedNumber(recent.ayah) })}
                       onPress={() => {
                         void Haptics.selectionAsync();
-                        if (settings.readerMode === 'mushaf') {
-                          router.push({ pathname: '/mushaf/[page]', params: { page: String(recent.page) } });
-                        } else {
-                          router.push({
-                            pathname: '/surah/[id]',
-                            params: { id: String(recent.surah), ayah: String(recent.ayah) },
-                          });
-                        }
+                        const route = readingRouteForPosition(
+                          settings.readerMode,
+                          recent.surah,
+                          recent.ayah,
+                        );
+                        if (route) router.push(route);
                       }}
                       style={({ pressed }) => [
                         styles.recentPage,
@@ -78,12 +79,12 @@ export default function HomeScreen() {
                         },
                       ]}
                     >
-                      <Text style={[styles.pageNumber, { color: colors.textMuted }]}>PAGE {recent.page}</Text>
+                      <Text style={[styles.pageNumber, { color: colors.textMuted }]}>{t('home.page', { page: localizedNumber(recent.page) })}</Text>
                       <Text accessibilityLanguage="ar" style={[styles.pageArabic, { color: colors.text }]}>
                         {chapter.arabicName.replace(/^سُورَةُ\s*/, '')}
                       </Text>
                       <Text style={[styles.pageTitle, { color: colors.text }]} numberOfLines={1}>{chapter.englishName}</Text>
-                      <Text style={[styles.pageMeta, { color: colors.textMuted }]}>Ayah {recent.ayah}</Text>
+                      <Text style={[styles.pageMeta, { color: colors.textMuted }]}>{t('home.ayah', { ayah: localizedNumber(recent.ayah) })}</Text>
                     </Pressable>
                   );
                 })}
@@ -91,30 +92,30 @@ export default function HomeScreen() {
             ) : (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Browse Quran to begin reading"
+                accessibilityLabel={t('home.browseToBegin')}
                 onPress={openLibrary}
                 style={({ pressed }) => [styles.emptyStateRow, { opacity: pressed ? 0.58 : 1 }]}
               >
                 <AppSymbol name="book" size={20} tintColor={colors.primary} />
                 <View style={styles.libraryCopy}>
-                  <Text style={[styles.libraryTitle, { color: colors.text }]}>No recent pages yet</Text>
-                  <Text style={[styles.libraryMeta, { color: colors.textMuted }]}>Pages you read will return here.</Text>
+                  <Text style={[styles.libraryTitle, { color: colors.text }]}>{t('home.noRecent')}</Text>
+                  <Text style={[styles.libraryMeta, { color: colors.textMuted }]}>{t('home.noRecentBody')}</Text>
                 </View>
-                <AppSymbol name="forward" size={15} tintColor={colors.textFaint} />
+                <AppSymbol name={isRTL ? 'back' : 'forward'} size={15} tintColor={colors.textFaint} />
               </Pressable>
             )}
           </View>
 
           <View style={styles.section}>
             <View style={styles.sectionHeading}>
-              <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>Playlists</Text>
-              <IconButton name="add" label="Create or manage playlists" onPress={() => router.push('/playlists')} />
+              <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>{t('home.playlists')}</Text>
+              <IconButton name="add" label={t('home.managePlaylists')} onPress={() => router.push('/playlists')} />
             </View>
             {playlists.length > 0 ? playlists.map((playlist, index) => (
               <View key={playlist.id}>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Open playlist ${playlist.name}, ${playlist.items.length} items`}
+                  accessibilityLabel={tCount(playlist.items.length, 'home.openPlaylistOne', 'home.openPlaylist', { name: playlist.name })}
                   onPress={() => router.push({ pathname: '/playlist/[id]', params: { id: playlist.id } })}
                   style={({ pressed }) => [styles.libraryRow, { backgroundColor: pressed ? colors.primarySoft : 'transparent' }]}
                 >
@@ -122,7 +123,7 @@ export default function HomeScreen() {
                   <View style={styles.libraryCopy}>
                     <Text style={[styles.libraryTitle, { color: colors.text }]}>{playlist.name}</Text>
                     <Text style={[styles.libraryMeta, { color: colors.textMuted }]}>
-                      {playlist.items.length === 1 ? '1 item' : `${playlist.items.length} items`}
+                      {tCount(playlist.items.length, 'home.oneItem', 'home.items')}
                     </Text>
                   </View>
                 </Pressable>
@@ -131,14 +132,14 @@ export default function HomeScreen() {
             )) : (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Create a Quran playlist"
+                accessibilityLabel={t('home.createPlaylist')}
                 onPress={() => router.push('/playlists')}
                 style={({ pressed }) => [styles.emptyStateRow, { opacity: pressed ? 0.58 : 1 }]}
               >
                 <AppSymbol name="queue" size={20} tintColor={colors.primary} />
                 <View style={styles.libraryCopy}>
-                  <Text style={[styles.libraryTitle, { color: colors.text }]}>Create your first playlist</Text>
-                  <Text style={[styles.libraryMeta, { color: colors.textMuted }]}>Group Surahs and Ayahs in your own order.</Text>
+                  <Text style={[styles.libraryTitle, { color: colors.text }]}>{t('home.firstPlaylist')}</Text>
+                  <Text style={[styles.libraryMeta, { color: colors.textMuted }]}>{t('home.firstPlaylistBody')}</Text>
                 </View>
                 <AppSymbol name="add" size={15} tintColor={colors.textFaint} />
               </Pressable>
@@ -146,10 +147,10 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>Quran Library</Text>
+            <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.text }]}>{t('home.library')}</Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Browse all 114 surahs"
+              accessibilityLabel={t('home.browseAllLabel')}
               onPress={openLibrary}
               style={({ pressed }) => [
                 styles.libraryRow,
@@ -158,14 +159,14 @@ export default function HomeScreen() {
             >
               <AppSymbol name="book" size={19} tintColor={colors.primary} />
               <View style={styles.libraryCopy}>
-                <Text style={[styles.libraryTitle, { color: colors.text }]}>Browse all surahs</Text>
-                <Text style={[styles.libraryMeta, { color: colors.textMuted }]}>114 chapters in canonical order</Text>
+                <Text style={[styles.libraryTitle, { color: colors.text }]}>{t('home.browseAll')}</Text>
+                <Text style={[styles.libraryMeta, { color: colors.textMuted }]}>{t('home.canonicalChapters')}</Text>
               </View>
             </Pressable>
             <View style={[styles.libraryDivider, { backgroundColor: colors.border }]} />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Open Quran bookmarks"
+              accessibilityLabel={t('home.openBookmarks')}
               onPress={openBookmarks}
               style={({ pressed }) => [
                 styles.libraryRow,
@@ -174,13 +175,11 @@ export default function HomeScreen() {
             >
               <AppSymbol name="bookmark" size={19} tintColor={colors.primary} />
               <View style={styles.libraryCopy}>
-                <Text style={[styles.libraryTitle, { color: colors.text }]}>Bookmarks</Text>
+                <Text style={[styles.libraryTitle, { color: colors.text }]}>{t('home.bookmarks')}</Text>
                 <Text style={[styles.libraryMeta, { color: colors.textMuted }]}>
                   {bookmarks.length === 0
-                    ? 'Save a surah or ayah for later'
-                    : bookmarks.length === 1
-                      ? '1 saved place'
-                      : `${bookmarks.length} saved places`}
+                    ? t('home.saveLater')
+                    : tCount(bookmarks.length, 'home.oneSavedPlace', 'home.savedPlaces')}
                 </Text>
               </View>
             </Pressable>

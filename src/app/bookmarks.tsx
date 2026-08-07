@@ -5,17 +5,19 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from '
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BookmarkPicker } from '@/bookmarks/BookmarkPicker';
-import type { QuranBookmark } from '@/bookmarks/bookmarks';
+import { bookmarkReadingPosition, type QuranBookmark } from '@/bookmarks/bookmarks';
 import { useBookmarks } from '@/bookmarks/BookmarksProvider';
 import { AppSymbol } from '@/components/AppSymbol';
 import { Atmosphere } from '@/components/Atmosphere';
 import { IconButton } from '@/components/IconButton';
 import { chapterByNumber } from '@/data/chapters';
+import { useI18n } from '@/i18n/useI18n';
 import { radius } from '@/theme/tokens';
 import { useAppPalette } from '@/theme/useAppPalette';
 
 export default function BookmarksScreen() {
   const colors = useAppPalette();
+  const { language, number: localizedNumber, t, tCount } = useI18n();
   const router = useRouter();
   const { bookmarks, ready, removeBookmark } = useBookmarks();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -23,33 +25,30 @@ export default function BookmarksScreen() {
   const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
   const openBookmark = (bookmark: QuranBookmark) => {
-    const id = String(bookmark.target.surah);
+    const position = bookmarkReadingPosition(bookmark.target);
+    const id = String(position.surah);
     void Haptics.selectionAsync();
-    if (bookmark.target.kind === 'ayah') {
-      router.replace({ pathname: '/surah/[id]', params: { id, ayah: String(bookmark.target.ayah) } });
-    } else {
-      router.replace({ pathname: '/surah/[id]', params: { id } });
-    }
+    router.replace({ pathname: '/surah/[id]', params: { id, ayah: String(position.ayah) } });
   };
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <Atmosphere />
       <View style={styles.navigation}>
-        <IconButton name="close" label="Close bookmarks" onPress={close} />
+        <IconButton name="close" label={t('bookmarks.close')} onPress={close} />
         <View style={styles.navigationTitle}>
-          <Text style={[styles.navTitle, { color: colors.text }]}>Bookmarks</Text>
+          <Text style={[styles.navTitle, { color: colors.text }]}>{t('bookmarks.title')}</Text>
           <Text style={[styles.navMeta, { color: colors.textMuted }]}>
-            {bookmarks.length === 1 ? '1 saved place' : `${bookmarks.length} saved places`}
+            {tCount(bookmarks.length, 'bookmarks.oneSavedPlace', 'bookmarks.savedPlaces')}
           </Text>
         </View>
-        <IconButton name="add" label="Add bookmark" onPress={() => setPickerOpen(true)} />
+        <IconButton name="add" label={t('bookmarks.add')} onPress={() => setPickerOpen(true)} />
       </View>
 
       {!ready ? (
         <View style={styles.centered}>
           <ActivityIndicator color={colors.primary} />
-          <Text style={[styles.loading, { color: colors.textMuted }]}>Loading bookmarks…</Text>
+          <Text style={[styles.loading, { color: colors.textMuted }]}>{t('bookmarks.loading')}</Text>
         </View>
       ) : (
         <FlatList
@@ -61,8 +60,8 @@ export default function BookmarksScreen() {
               <View style={[styles.emptyIcon, { backgroundColor: colors.primarySoft }]}>
                 <AppSymbol name="bookmark" size={26} tintColor={colors.primary} />
               </View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No bookmarks yet</Text>
-              <Text style={[styles.emptyBody, { color: colors.textMuted }]}>Save a whole surah or a specific ayah so you can return to it directly.</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('bookmarks.empty')}</Text>
+              <Text style={[styles.emptyBody, { color: colors.textMuted }]}>{t('bookmarks.emptyBody')}</Text>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => setPickerOpen(true)}
@@ -72,22 +71,36 @@ export default function BookmarksScreen() {
                 ]}
               >
                 <AppSymbol name="add" size={18} tintColor={colors.onPrimary} />
-                <Text style={[styles.emptyActionText, { color: colors.onPrimary }]}>Add a bookmark</Text>
+                <Text style={[styles.emptyActionText, { color: colors.onPrimary }]}>{t('bookmarks.addAction')}</Text>
               </Pressable>
             </View>
           }
           renderItem={({ item }) => {
             const chapter = chapterByNumber(item.target.surah);
             if (!chapter) return null;
-            const description =
-              item.target.kind === 'ayah'
-                ? `Ayah ${item.target.ayah} · ${item.target.key}`
-                : `Whole surah · ${chapter.ayahCount} ayahs`;
+            const description = item.target.kind === 'surah'
+              ? t('common.wholeSurah', { count: localizedNumber(chapter.ayahCount) })
+              : item.target.kind === 'ayah'
+                ? t('common.ayah', { number: localizedNumber(item.target.ayah) })
+                : t('common.ayahRange', {
+                    start: localizedNumber(item.target.startAyah),
+                    end: localizedNumber(item.target.endAyah),
+                  });
+            const typeLabel = t(
+              item.target.kind === 'surah'
+                ? 'bookmarks.typeSurah'
+                : item.target.kind === 'ayah'
+                  ? 'bookmarks.typeAyah'
+                  : 'bookmarks.typeRange',
+            );
+            const localizedName = language === 'ar'
+              ? chapter.arabicName.replace(/^سُورَةُ\s*/, '')
+              : chapter.englishName;
             return (
               <View style={styles.bookmarkRow}>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Open ${chapter.englishName}, ${description}`}
+                  accessibilityLabel={t('bookmarks.open', { surah: localizedName, description })}
                   onPress={() => openBookmark(item)}
                   style={({ pressed }) => [
                     styles.bookmarkMain,
@@ -96,7 +109,13 @@ export default function BookmarksScreen() {
                 >
                   <View style={[styles.marker, { borderColor: colors.gold }]}>
                     <Text style={[styles.markerText, { color: colors.gold }]}>
-                      {item.target.kind === 'ayah' ? item.target.ayah : chapter.number}
+                      {localizedNumber(
+                        item.target.kind === 'surah'
+                          ? chapter.number
+                          : item.target.kind === 'ayah'
+                            ? item.target.ayah
+                            : item.target.startAyah,
+                      )}
                     </Text>
                   </View>
                   <View style={styles.bookmarkCopy}>
@@ -109,12 +128,17 @@ export default function BookmarksScreen() {
                         {chapter.arabicName.replace(/^سُورَةُ\s*/, '')}
                       </Text>
                     </View>
-                    <Text style={[styles.bookmarkMeta, { color: colors.textMuted }]}>{description}</Text>
+                    <Text style={[styles.bookmarkMeta, { color: colors.textMuted }]}>
+                      {typeLabel} · {description}
+                    </Text>
                   </View>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Remove bookmark for ${chapter.englishName}${item.target.kind === 'ayah' ? ` Ayah ${item.target.ayah}` : ''}`}
+                  accessibilityLabel={t('bookmarks.remove', {
+                    surah: localizedName,
+                    ayah: item.target.kind === 'surah' ? '' : ` ${description}`,
+                  })}
                   hitSlop={8}
                   onPress={() => {
                     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);

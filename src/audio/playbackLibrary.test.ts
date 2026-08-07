@@ -7,6 +7,7 @@ import {
   moveQueueEntry,
   parsePlaybackLibrary,
   removeQueueEntry,
+  transitionQueuedPlayback,
 } from './playbackLibrary';
 
 describe('playback queue and playlists', () => {
@@ -39,6 +40,52 @@ describe('playback queue and playlists', () => {
       'repeat',
     ]);
     expect(removeQueueEntry(queue, 'first').map((entry) => entry.id)).toEqual(['repeat']);
+  });
+
+  it('keeps an idle enqueue pending without requesting playback', () => {
+    const queued = [createQueueEntry(1, 1, 7, 'fatiha')];
+
+    expect(transitionQueuedPlayback(queued, { type: 'enqueued' })).toEqual({
+      action: 'wait',
+      queue: queued,
+    });
+  });
+
+  it('starts the queue head after the current playback item finishes', () => {
+    const first = createQueueEntry(2, 5, 5, 'ayah-5');
+    const second = createQueueEntry(2, 8, 10, 'range-8-10');
+
+    expect(transitionQueuedPlayback([first, second], { type: 'current-finished' })).toEqual({
+      action: 'play',
+      nextEntry: first,
+      queue: [first, second],
+    });
+  });
+
+  it('removes a completed entry and auto-advances in queue order', () => {
+    const first = createQueueEntry(2, 5, 5, 'ayah-5');
+    const second = createQueueEntry(2, 8, 10, 'range-8-10');
+
+    expect(transitionQueuedPlayback([first, second], {
+      type: 'entry-finished',
+      entryId: first.id,
+    })).toEqual({
+      action: 'play',
+      nextEntry: second,
+      queue: [second],
+    });
+  });
+
+  it('stops and clears the completed queue session at the end', () => {
+    const only = createQueueEntry(1, 1, 7, 'fatiha');
+
+    expect(transitionQueuedPlayback([only], {
+      type: 'entry-finished',
+      entryId: only.id,
+    })).toEqual({
+      action: 'stop',
+      queue: [],
+    });
   });
 
   it('creates named playlists and adds ordered ranges', () => {

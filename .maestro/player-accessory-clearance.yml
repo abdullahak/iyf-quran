@@ -1,0 +1,35 @@
+appId: com.abdlh.iyfquran
+name: Keeps the player accessory above every tab destination
+---
+- launchApp:
+    clearState: true
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible: 'Recent pages|الصفحات الأخيرة'
+    timeout: 20000
+- tapOn:
+    id: tab-quran
+- extendedWaitUntil:
+    visible: '114 Surahs|١١٤ سورة'
+    timeout: 20000
+- tapOn:
+    id: play-surah-1
+- extendedWaitUntil:
+    visible:
+      id: player-bar-content
+    timeout: 30000
+- assertVisible:
+    text: '^Quran$|^القرآن$'
+- takeScreenshot: player-accessory-quran
+- tapOn:
+    id: tab-home
+- assertVisible:
+    id: player-bar-content
+- assertVisible: 'Recent pages|الصفحات الأخيرة'
+- takeScreenshot: player-accessory-home
+- tapOn:
+    id: tab-settings
+- assertVisible:
+    id: player-bar-content
+- assertVisible: 'Settings|الإعدادات'
+- takeScreenshot: player-accessory-settings

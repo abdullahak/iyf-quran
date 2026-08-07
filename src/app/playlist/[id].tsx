@@ -9,6 +9,7 @@ import { playWithUnavailableFeedback } from '@/audio/playbackFeedback';
 import { AppSymbol } from '@/components/AppSymbol';
 import { IconButton } from '@/components/IconButton';
 import { chapterByNumber } from '@/data/chapters';
+import { useI18n } from '@/i18n/useI18n';
 import { useAppPalette } from '@/theme/useAppPalette';
 import { radius } from '@/theme/tokens';
 
@@ -16,6 +17,7 @@ export default function PlaylistScreen() {
   const params = useLocalSearchParams<{ id: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const colors = useAppPalette();
+  const { isRTL, language, number: localizedNumber, t, tCount } = useI18n();
   const router = useRouter();
   const audio = useQuranAudio();
   const { playlists, replaceQueue } = usePlaybackLibrary();
@@ -25,8 +27,8 @@ export default function PlaylistScreen() {
   if (!playlist) {
     return (
       <SafeAreaView style={[styles.centered, { backgroundColor: colors.background }]}>
-        <Text style={[styles.errorTitle, { color: colors.text }]}>Playlist not found</Text>
-        <Pressable onPress={close}><Text style={[styles.errorAction, { color: colors.primary }]}>Return Home</Text></Pressable>
+        <Text style={[styles.errorTitle, { color: colors.text }]}>{t('playlist.notFound')}</Text>
+        <Pressable onPress={close}><Text style={[styles.errorAction, { color: colors.primary }]}>{t('playlist.returnHome')}</Text></Pressable>
       </SafeAreaView>
     );
   }
@@ -34,7 +36,7 @@ export default function PlaylistScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.navigation}>
-        <IconButton name="back" label="Close playlist" onPress={close} />
+        <IconButton name={isRTL ? 'forward' : 'back'} label={t('playlist.close')} onPress={close} />
         <Text style={[styles.navTitle, { color: colors.text }]} numberOfLines={1}>{playlist.name}</Text>
         <View style={styles.navigationEnd} />
       </View>
@@ -45,12 +47,12 @@ export default function PlaylistScreen() {
           </View>
           <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{playlist.name}</Text>
           <Text style={[styles.meta, { color: colors.textMuted }]}>
-            {playlist.items.length === 1 ? '1 Quran range' : `${playlist.items.length} Quran ranges`}
+            {tCount(playlist.items.length, 'playlist.oneRange', 'playlist.ranges')}
           </Text>
           <Pressable
             disabled={playlist.items.length === 0}
             accessibilityRole="button"
-            accessibilityLabel={`Play playlist ${playlist.name}`}
+            accessibilityLabel={t('playlist.playLabel', { name: playlist.name })}
             accessibilityState={{ disabled: playlist.items.length === 0 }}
             onPress={async () => {
               const started = await playWithUnavailableFeedback(
@@ -61,12 +63,12 @@ export default function PlaylistScreen() {
             style={[styles.playButton, { backgroundColor: colors.primary, opacity: playlist.items.length > 0 ? 1 : 0.35 }]}
           >
             <AppSymbol name="play" size={18} tintColor={colors.onPrimary} weight="bold" />
-            <Text style={[styles.queueButtonText, { color: colors.onPrimary }]}>Play playlist</Text>
+            <Text style={[styles.queueButtonText, { color: colors.onPrimary }]}>{t('playlist.play')}</Text>
           </Pressable>
           <Pressable
             disabled={playlist.items.length === 0}
             accessibilityRole="button"
-            accessibilityLabel={`Use ${playlist.name} as the playback queue`}
+            accessibilityLabel={t('playlist.useQueueLabel', { name: playlist.name })}
             accessibilityState={{ disabled: playlist.items.length === 0 }}
             onPress={() => {
               replaceQueue(playlist.items.map((entry, index) => ({ ...entry, id: `queue:${playlist.id}:${index}` })));
@@ -75,22 +77,29 @@ export default function PlaylistScreen() {
             style={[styles.queueButton, { borderColor: colors.border }]}
           >
             <AppSymbol name="queue" size={18} tintColor={colors.primary} />
-            <Text style={[styles.queueButtonText, { color: colors.text }]}>Use as queue</Text>
+            <Text style={[styles.queueButtonText, { color: colors.text }]}>{t('playlist.useQueue')}</Text>
           </Pressable>
         </View>
 
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Items</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('playlist.items')}</Text>
         {playlist.items.length > 0 ? playlist.items.map((item, index) => {
           const chapter = chapterByNumber(item.surah)!;
           const wholeSurah = item.startAyah === 1 && item.endAyah === chapter.ayahCount;
           return (
             <View key={item.id}>
               <View style={styles.itemRow}>
-                <Text style={[styles.itemIndex, { color: colors.textFaint }]}>{index + 1}</Text>
+                <Text style={[styles.itemIndex, { color: colors.textFaint }]}>{localizedNumber(index + 1)}</Text>
                 <View style={styles.itemCopy}>
-                  <Text style={[styles.itemTitle, { color: colors.text }]}>{chapter.englishName}</Text>
+                  <Text style={[styles.itemTitle, { color: colors.text }]}>{language === 'ar' ? chapter.arabicName.replace(/^سُورَةُ\s*/, '') : chapter.englishName}</Text>
                   <Text style={[styles.itemMeta, { color: colors.textMuted }]}>
-                    {wholeSurah ? `Surah ${chapter.number}` : `Ayahs ${item.startAyah}–${item.endAyah}`}
+                    {wholeSurah
+                      ? t('common.surahNumber', { number: localizedNumber(chapter.number) })
+                      : item.startAyah === item.endAyah
+                        ? t('common.ayah', { number: localizedNumber(item.startAyah) })
+                        : t('common.ayahRange', {
+                            start: localizedNumber(item.startAyah),
+                            end: localizedNumber(item.endAyah),
+                          })}
                   </Text>
                 </View>
                 <Text accessibilityLanguage="ar" style={[styles.itemArabic, { color: colors.text }]}>{chapter.arabicName.replace(/^سُورَةُ\s*/, '')}</Text>
@@ -100,8 +109,8 @@ export default function PlaylistScreen() {
           );
         }) : (
           <View style={styles.empty}>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>This playlist is empty</Text>
-            <Text style={[styles.emptyBody, { color: colors.textMuted }]}>Add a Surah or selected Ayah from Read.</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('playlist.empty')}</Text>
+            <Text style={[styles.emptyBody, { color: colors.textMuted }]}>{t('playlist.emptyBody')}</Text>
           </View>
         )}
       </ScrollView>

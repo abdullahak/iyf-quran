@@ -2,7 +2,9 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 
 import { AudioProvider, useQuranAudio } from './AudioProvider';
+import { PlaybackLibraryProvider, usePlaybackLibrary } from './PlaybackLibraryProvider';
 import { configureHeadsetControls } from './headsetControls';
+import { createPlaybackEndRule } from './playbackEndRule';
 import { remoteCommandConfiguration } from './remoteCommands';
 import { SYNCHRONIZED_TIMINGS } from './timings';
 import { chapterByNumber } from '../data/chapters';
@@ -53,7 +55,11 @@ jest.mock('./headsetControls', () => ({
 }));
 
 function Wrapper({ children }: PropsWithChildren) {
-  return <AudioProvider>{children}</AudioProvider>;
+  return (
+    <PlaybackLibraryProvider>
+      <AudioProvider>{children}</AudioProvider>
+    </PlaybackLibraryProvider>
+  );
 }
 
 describe('AudioProvider queue positioning', () => {
@@ -68,6 +74,223 @@ describe('AudioProvider queue positioning', () => {
     mockStatus.playing = false;
     mockSettings.reciterId = 'muhammad-al-faqih';
     mockPlayer.seekTo.mockResolvedValue(undefined);
+  });
+
+  it('waits for the current item, then consumes exact queued ranges in order and clears at the end', async () => {
+    const currentChapter = chapterByNumber(1)!;
+    const queuedChapter = chapterByNumber(2)!;
+    const firstStart = SYNCHRONIZED_TIMINGS[2]!.find((timing) => timing.ayah === 1)!.start;
+    const firstEnd = SYNCHRONIZED_TIMINGS[2]!.find((timing) => timing.ayah === 1)!.end;
+    const secondStart = SYNCHRONIZED_TIMINGS[2]!.find((timing) => timing.ayah === 2)!.start;
+    const secondEnd = SYNCHRONIZED_TIMINGS[2]!.find((timing) => timing.ayah === 3)!.end;
+    const { rerender, result } = await renderHook(() => ({
+      audio: useQuranAudio(),
+      library: usePlaybackLibrary(),
+    }), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.library.ready).toBe(true));
+
+    await act(() => result.current.audio.playChapter(currentChapter));
+    jest.clearAllMocks();
+    await act(() => {
+      result.current.library.enqueueRange(queuedChapter.number, 1, 1);
+      result.current.library.enqueueRange(queuedChapter.number, 2, 3);
+    });
+
+    expect(result.current.library.queue).toHaveLength(2);
+    expect(mockPlayer.pause).not.toHaveBeenCalled();
+    expect(mockPlayer.play).not.toHaveBeenCalled();
+    expect(mockPlayer.replace).not.toHaveBeenCalled();
+    expect(mockPlayer.seekTo).not.toHaveBeenCalled();
+
+    mockStatus.currentTime = mockStatus.duration;
+    mockStatus.didJustFinish = true;
+    await rerender(undefined);
+    await waitFor(() => expect(result.current.audio.activeQueueEntry).toMatchObject({
+      surah: 2,
+      startAyah: 1,
+      endAyah: 1,
+    }));
+    expect(mockPlayer.seekTo).toHaveBeenLastCalledWith(0, 50, 50);
+
+    mockPlayer.playing = true;
+    mockStatus.currentTime = 0;
+    mockStatus.didJustFinish = false;
+    mockStatus.playing = true;
+    await rerender(undefined);
+    mockStatus.currentTime = firstStart;
+    await rerender(undefined);
+    mockStatus.currentTime = firstEnd;
+    await rerender(undefined);
+    await waitFor(() => expect(result.current.audio.activeQueueEntry).toMatchObject({
+      surah: 2,
+      startAyah: 2,
+      endAyah: 3,
+    }));
+    expect(result.current.library.queue).toHaveLength(1);
+    expect(result.current.library.queue[0]).toMatchObject({ startAyah: 2, endAyah: 3 });
+    expect(mockPlayer.seekTo).toHaveBeenLastCalledWith(secondStart, 50, 50);
+
+    mockStatus.currentTime = secondStart;
+    await rerender(undefined);
+    mockStatus.currentTime = secondEnd;
+    await rerender(undefined);
+    await waitFor(() => expect(result.current.audio.activeQueueEntry).toBeUndefined());
+    expect(result.current.library.queue).toEqual([]);
+    expect(mockPlayer.pause).toHaveBeenCalled();
+  });
+
+  it('keeps an idle enqueue waiting until manual queue play starts its exact range', async () => {
+    const start = SYNCHRONIZED_TIMINGS[2]!.find((timing) => timing.ayah === 8)!.start;
+    const { result } = await renderHook(() => ({
+      audio: useQuranAudio(),
+      library: usePlaybackLibrary(),
+    }), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.library.ready).toBe(true));
+
+    await act(() => {
+      result.current.library.enqueueRange(2, 8, 10);
+    });
+    expect(result.current.audio.activeQueueEntry).toBeUndefined();
+    expect(mockPlayer.play).not.toHaveBeenCalled();
+    expect(mockPlayer.seekTo).not.toHaveBeenCalled();
+
+    let started = false;
+    await act(async () => {
+      started = await result.current.audio.playLibraryQueue();
+    });
+    expect(started).toBe(true);
+    expect(result.current.audio.activeQueueEntry).toMatchObject({
+      surah: 2, startAyah: 8, endAyah: 10,
+    });
+    expect(mockPlayer.seekTo).toHaveBeenCalledWith(start, 50, 50);
+    expect(mockPlayer.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('makes play-from-Ayah continue only through the end of that Surah', async () => {
+    const chapter = chapterByNumber(2)!;
+    const { result } = await renderHook(() => useQuranAudio(), { wrapper: Wrapper });
+
+    await act(() => result.current.playChapter(chapter));
+    await act(() => result.current.setPlaybackScope('page'));
+    expect(result.current.endRule.kind).toBe('page');
+
+    let started = false;
+    await act(async () => {
+      started = await result.current.playFromAyah(chapter, 2);
+    });
+
+    expect(started).toBe(true);
+    expect(result.current.endRule).toEqual({ kind: 'surah' });
+  });
+
+  it('starts the first Ayah from the very beginning of the Surah track', async () => {
+    const chapter = chapterByNumber(2)!;
+    const { result } = await renderHook(() => useQuranAudio(), { wrapper: Wrapper });
+
+    jest.clearAllMocks();
+    let started = false;
+    await act(async () => {
+      started = await result.current.playFromAyah(chapter, 1);
+    });
+
+    expect(started).toBe(true);
+    expect(mockPlayer.seekTo).toHaveBeenCalledWith(0, 50, 50);
+    expect(result.current.endRule).toEqual({ kind: 'surah' });
+  });
+
+  it('seeks the first Ayah to the very beginning of the loaded Surah track', async () => {
+    const chapter = chapterByNumber(2)!;
+    const { result } = await renderHook(() => useQuranAudio(), { wrapper: Wrapper });
+
+    await act(() => result.current.playChapter(chapter));
+    jest.clearAllMocks();
+
+    await act(() => result.current.seekToAyah(1));
+
+    expect(mockPlayer.seekTo).toHaveBeenCalledWith(0, 50, 50);
+    expect(mockPlayer.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not map stale time from the previous Surah onto a newly commanded source', async () => {
+    const firstChapter = chapterByNumber(1)!;
+    const nextChapter = chapterByNumber(2)!;
+    const { rerender, result } = await renderHook(() => useQuranAudio(), { wrapper: Wrapper });
+
+    await act(() => result.current.playChapter(firstChapter));
+    mockStatus.currentTime = 50;
+    mockStatus.playing = true;
+    await rerender(undefined);
+
+    await act(() => result.current.playFromAyah(nextChapter, 1));
+
+    expect(result.current.chapter?.number).toBe(2);
+    expect(result.current.activeAyah).toBeUndefined();
+  });
+
+  it('keeps Previous usable on the first Surah by restarting the track', async () => {
+    const chapter = chapterByNumber(1)!;
+    const { result } = await renderHook(() => useQuranAudio(), { wrapper: Wrapper });
+
+    await act(() => result.current.playChapter(chapter));
+    expect(result.current.canPlayPrevious).toBe(true);
+    jest.clearAllMocks();
+
+    await act(() => result.current.previousChapter());
+
+    expect(mockPlayer.seekTo).toHaveBeenCalledWith(0, 50, 50);
+    expect(mockPlayer.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps Next usable at a queue edge by continuing to the adjacent Surah', async () => {
+    const chapter = chapterByNumber(1)!;
+    const entry = { id: 'only-entry', surah: 1, startAyah: 1, endAyah: chapter.ayahCount };
+    const { result } = await renderHook(() => useQuranAudio(), { wrapper: Wrapper });
+
+    await act(() => result.current.playQueue([entry]));
+    expect(result.current.canPlayNext).toBe(true);
+
+    await act(() => result.current.nextChapter());
+
+    expect(result.current.chapter?.number).toBe(2);
+    expect(result.current.activeQueueEntry).toBeUndefined();
+  });
+
+  it.each(['page', 'juz'] as const)(
+    'rebases a selected %s scope when a chapter is started manually',
+    async (scope) => {
+      const firstChapter = chapterByNumber(1)!;
+      const nextChapter = chapterByNumber(3)!;
+      const { result } = await renderHook(() => useQuranAudio(), { wrapper: Wrapper });
+
+      await act(() => result.current.playChapter(firstChapter));
+      await act(() => result.current.setPlaybackScope(scope));
+      expect(result.current.endRule).toEqual(createPlaybackEndRule(scope, 1, 1));
+
+      await act(() => result.current.playChapter(nextChapter));
+      expect(result.current.endRule).toEqual(createPlaybackEndRule(scope, 3, 1));
+    },
+  );
+
+  it('preserves an absolute sleep timer across queue start and queue advance', async () => {
+    const firstChapter = chapterByNumber(1)!;
+    const secondChapter = chapterByNumber(2)!;
+    const entries = [
+      { id: 'timer-first', surah: 1, startAyah: 1, endAyah: firstChapter.ayahCount },
+      { id: 'timer-second', surah: 2, startAyah: 1, endAyah: secondChapter.ayahCount },
+    ];
+    const { result } = await renderHook(() => useQuranAudio(), { wrapper: Wrapper });
+
+    await act(() => result.current.playChapter(firstChapter));
+    await act(() => result.current.setSleepTimer(30));
+    const timer = result.current.endRule;
+    expect(timer).toMatchObject({ kind: 'timer', durationMinutes: 30 });
+
+    await act(() => result.current.playQueue(entries));
+    expect(result.current.endRule).toEqual(timer);
+    await act(() => result.current.nextChapter());
+    expect(result.current.endRule).toEqual(timer);
+
+    await act(() => result.current.setSleepTimer(undefined));
   });
 
   it('pauses and positions a same-source queue entry before publishing or playing it', async () => {
@@ -129,8 +352,8 @@ describe('AudioProvider queue positioning', () => {
       nextPromise = result.current.nextChapter();
       await Promise.resolve();
     });
-    const expectedStart = SYNCHRONIZED_TIMINGS[1]![0]!.start;
-    await waitFor(() => expect(mockPlayer.seekTo).toHaveBeenCalledWith(expectedStart, 50, 50));
+    const firstAyahStart = SYNCHRONIZED_TIMINGS[1]![0]!.start;
+    await waitFor(() => expect(mockPlayer.seekTo).toHaveBeenCalledWith(0, 50, 50));
 
     expect(mockPlayer.pause).toHaveBeenCalledTimes(1);
     expect(mockPlayer.play).not.toHaveBeenCalled();
@@ -155,7 +378,7 @@ describe('AudioProvider queue positioning', () => {
     await rerender(undefined);
     expect(result.current.activeQueueEntry).toEqual(ayahOneRange);
 
-    mockStatus.currentTime = expectedStart;
+    mockStatus.currentTime = firstAyahStart;
     await rerender(undefined);
     expect(result.current.activeQueueEntry).toEqual(ayahOneRange);
 
@@ -195,7 +418,7 @@ describe('AudioProvider queue positioning', () => {
       nextPromise = result.current.nextChapter();
       await Promise.resolve();
     });
-    await waitFor(() => expect(mockPlayer.seekTo).toHaveBeenCalledWith(start, 50, 50));
+    await waitFor(() => expect(mockPlayer.seekTo).toHaveBeenCalledWith(0, 50, 50));
 
     mockStatus.currentTime = end;
     mockStatus.didJustFinish = true;
@@ -621,8 +844,9 @@ describe('AudioProvider queue positioning', () => {
     expect(result.current.endRule).toMatchObject({ kind: 'timer', durationMinutes: 30 });
   });
 
-  it('does not let timer expiry interrupt an in-flight queue start that supersedes it', async () => {
+  it('lets timer expiry wait behind an in-flight queue start and then pause the queue', async () => {
     const realSetTimeout = globalThis.setTimeout;
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(0);
     let expireTimer!: () => void;
     const timeoutSpy = jest.spyOn(globalThis, 'setTimeout').mockImplementation((
       ...parameters: Parameters<typeof globalThis.setTimeout>
@@ -659,6 +883,7 @@ describe('AudioProvider queue positioning', () => {
       expect(mockPlayer.pause).toHaveBeenCalledTimes(1);
 
       await act(async () => {
+        nowSpy.mockReturnValue(60_000);
         expireTimer();
         await Promise.resolve();
       });
@@ -674,7 +899,9 @@ describe('AudioProvider queue positioning', () => {
       expect(result.current.activeQueueEntry).toEqual(entry);
       expect(result.current.endRule).toEqual({ kind: 'continuous' });
       expect(mockPlayer.play).toHaveBeenCalledTimes(1);
+      expect(mockPlayer.pause).toHaveBeenCalledTimes(2);
     } finally {
+      nowSpy.mockRestore();
       timeoutSpy.mockRestore();
     }
   });

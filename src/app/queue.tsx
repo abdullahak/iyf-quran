@@ -9,17 +9,19 @@ import { playWithUnavailableFeedback } from '@/audio/playbackFeedback';
 import { AppSymbol } from '@/components/AppSymbol';
 import { IconButton } from '@/components/IconButton';
 import { chapterByNumber } from '@/data/chapters';
+import { useI18n } from '@/i18n/useI18n';
 import { useAppPalette } from '@/theme/useAppPalette';
 
 export default function QueueScreen() {
   const colors = useAppPalette();
+  const { language, number: localizedNumber, t, tCount } = useI18n();
   const router = useRouter();
   const audio = useQuranAudio();
   const { clearQueue, queue, removeFromQueue } = usePlaybackLibrary();
   const close = () => (router.canDismiss() ? router.dismiss() : router.canGoBack() ? router.back() : router.replace('/'));
 
   const startAt = async (index: number) => {
-    const started = await playWithUnavailableFeedback(() => audio.playQueue(queue, index));
+    const started = await playWithUnavailableFeedback(() => audio.playLibraryQueue(index));
     if (!started) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     close();
@@ -28,9 +30,9 @@ export default function QueueScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.navigation}>
-        <IconButton name="close" label="Close queue" onPress={close} />
-        <Text accessibilityRole="header" style={[styles.navTitle, { color: colors.text }]}>Queue</Text>
-        {queue.length > 0 ? <IconButton name="trash" label="Clear queue" onPress={() => {
+        <IconButton name="close" label={t('queue.close')} onPress={close} />
+        <Text accessibilityRole="header" style={[styles.navTitle, { color: colors.text }]}>{t('queue.title')}</Text>
+        {queue.length > 0 ? <IconButton name="trash" label={t('queue.clear')} onPress={() => {
           void audio.clearPlaybackQueue();
           clearQueue();
         }} /> : <View style={styles.navigationEnd} />}
@@ -41,24 +43,28 @@ export default function QueueScreen() {
           <>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Play queue from the beginning"
+              accessibilityLabel={t('queue.playFromBeginning')}
               onPress={() => void startAt(0)}
               style={[styles.playAll, { backgroundColor: colors.primary }]}
             >
               <AppSymbol name="play" size={17} tintColor={colors.onPrimary} weight="bold" />
-              <Text style={[styles.playAllText, { color: colors.onPrimary }]}>Play queue</Text>
+              <Text style={[styles.playAllText, { color: colors.onPrimary }]}>{t('queue.play')}</Text>
             </Pressable>
-            <Text style={[styles.queueMeta, { color: colors.textMuted }]}>{queue.length === 1 ? '1 item' : `${queue.length} items`} · plays in order</Text>
+            <Text style={[styles.queueMeta, { color: colors.textMuted }]}>{tCount(queue.length, 'queue.oneMeta', 'queue.meta')}</Text>
             {queue.map((item, index) => {
               const chapter = chapterByNumber(item.surah)!;
               const wholeSurah = item.startAyah === 1 && item.endAyah === chapter.ayahCount;
               const active = audio.activeQueueEntry?.id === item.id;
+              const localizedName = language === 'ar'
+                ? chapter.arabicName.replace(/^سُورَةُ\s*/, '')
+                : chapter.englishName;
+              const range = wholeSurah ? '' : ` ${t('common.ayahRange', { start: localizedNumber(item.startAyah), end: localizedNumber(item.endAyah) })}`;
               return (
                 <View key={item.id}>
                   <View style={[styles.itemRow, active && { backgroundColor: colors.primarySoft }]}>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel={`Play ${chapter.englishName}${wholeSurah ? '' : ` Ayahs ${item.startAyah} to ${item.endAyah}`}`}
+                      accessibilityLabel={t('queue.playRange', { surah: localizedName, range })}
                       onPress={() => void startAt(index)}
                       style={styles.itemMain}
                     >
@@ -66,20 +72,20 @@ export default function QueueScreen() {
                         {active ? (
                           <AppSymbol name="play" size={12} tintColor={colors.onPrimary} />
                         ) : (
-                          <Text style={[styles.itemNumberText, { color: colors.textMuted }]}>{index + 1}</Text>
+                          <Text style={[styles.itemNumberText, { color: colors.textMuted }]}>{localizedNumber(index + 1)}</Text>
                         )}
                       </View>
                       <View style={styles.itemCopy}>
                         <Text style={[styles.itemTitle, { color: colors.text }]}>{chapter.englishName}</Text>
                         <Text style={[styles.itemMeta, { color: colors.textMuted }]}>
-                          {wholeSurah ? `Surah ${chapter.number}` : `Ayahs ${item.startAyah}–${item.endAyah}`}
+                          {wholeSurah ? t('common.surahNumber', { number: localizedNumber(chapter.number) }) : t('common.ayahRange', { start: localizedNumber(item.startAyah), end: localizedNumber(item.endAyah) })}
                         </Text>
                       </View>
                       <Text accessibilityLanguage="ar" style={[styles.itemArabic, { color: colors.text }]}>
                         {chapter.arabicName.replace(/^سُورَةُ\s*/, '')}
                       </Text>
                     </Pressable>
-                    <IconButton name="close" label={`Remove ${chapter.englishName} from queue`} onPress={() => removeFromQueue(item.id)} />
+                    <IconButton name="close" label={t('queue.remove', { surah: localizedName })} onPress={() => removeFromQueue(item.id)} />
                   </View>
                   {index < queue.length - 1 ? <View style={[styles.divider, { backgroundColor: colors.border }]} /> : null}
                 </View>
@@ -89,8 +95,8 @@ export default function QueueScreen() {
         ) : (
           <View style={styles.empty}>
             <AppSymbol name="queue" size={28} tintColor={colors.textFaint} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>Your queue is empty</Text>
-            <Text style={[styles.emptyBody, { color: colors.textMuted }]}>Add a Surah from Now Playing or an Ayah while reading.</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('queue.empty')}</Text>
+            <Text style={[styles.emptyBody, { color: colors.textMuted }]}>{t('queue.emptyBody')}</Text>
           </View>
         )}
       </ScrollView>

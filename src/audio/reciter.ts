@@ -20,6 +20,10 @@ export type QuranReciter = {
   supportsTimings: boolean;
 };
 
+// New offline downloads remain fail-closed until written redistribution
+// permission for this exact recording corpus is archived with the project.
+export const MUHAMMAD_AL_FAQIH_OFFLINE_RIGHTS_CONFIRMED: boolean = false;
+
 export const MUHAMMAD_AL_FAQIH = {
   id: 'muhammad-al-faqih',
   name: 'Muhammad Al-Faqih',
@@ -27,10 +31,9 @@ export const MUHAMMAD_AL_FAQIH = {
   narration: 'Hafs',
   country: 'Yemen',
   catalogUrl: 'https://mp3quran.net/eng/mhmd-lfkyh',
-  artworkUrl: 'https://artwork.qurancentral.com/muhammad-al-faqih-300x300.jpg',
   audioBaseUrl:
     'https://server16.mp3quran.net/M_Alfaqih/Rewayat-Hafs-A-n-Assem',
-  supportsOffline: true,
+  supportsOffline: MUHAMMAD_AL_FAQIH_OFFLINE_RIGHTS_CONFIRMED,
   supportsTimings: true,
 } as const satisfies QuranReciter;
 

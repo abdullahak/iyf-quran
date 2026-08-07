@@ -27,6 +27,11 @@ jest.mock('./fileIntegrity', () => ({
   sha256File: jest.fn(),
 }));
 
+jest.mock('./reciter', () => ({
+  ...jest.requireActual('./reciter'),
+  MUHAMMAD_AL_FAQIH_OFFLINE_RIGHTS_CONFIRMED: true,
+}));
+
 const track = recitationTrack({ number: 1 });
 const record = {
   surah: 1,

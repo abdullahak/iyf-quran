@@ -3,6 +3,7 @@ import {
   MEDINA_PAGES,
   medinaPage,
   medinaPageForAyah,
+  medinaPageMetadata,
   medinaPageSegments,
 } from './pages';
 
@@ -29,6 +30,13 @@ describe('Hafs Medina page metadata', () => {
       { surah: 113, startAyah: 1, endAyah: 5 },
       { surah: 114, startAyah: 1, endAyah: 6 },
     ]);
+  });
+
+  it('describes every Surah and Juz represented on a page', () => {
+    expect(medinaPageMetadata(604)).toEqual({
+      surahNumbers: [112, 113, 114],
+      juzNumbers: [30],
+    });
   });
 
   it('covers all 6,236 canonical ayahs exactly once', () => {

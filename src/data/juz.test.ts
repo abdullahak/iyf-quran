@@ -1,4 +1,4 @@
-import { JUZ_SECTIONS } from './juz';
+import { JUZ_SECTIONS, juzForAyah } from './juz';
 
 describe('Juz sections', () => {
   it('covers all 30 Juz and every Hafs ayah exactly once', () => {
@@ -45,5 +45,12 @@ describe('Juz sections', () => {
       startAyah: finalSegment.startAyah,
       endAyah: finalSegment.endAyah,
     }).toEqual({ surah: 114, startAyah: 1, endAyah: 6 });
+  });
+
+  it('locates Juz numbers at canonical Ayah boundaries', () => {
+    expect(juzForAyah(2, 141)).toBe(1);
+    expect(juzForAyah(2, 142)).toBe(2);
+    expect(juzForAyah(114, 6)).toBe(30);
+    expect(juzForAyah(114, 7)).toBeUndefined();
   });
 });

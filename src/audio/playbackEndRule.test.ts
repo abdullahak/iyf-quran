@@ -8,8 +8,9 @@ import {
 } from './playbackEndRule';
 
 describe('playback end rules', () => {
-  it('creates continuous and Surah-local rules', () => {
+  it('creates internal continuous, user-facing Quran-end, and Surah-local rules', () => {
     expect(createPlaybackEndRule('continuous', 2, 6)).toEqual({ kind: 'continuous' });
+    expect(createPlaybackEndRule('quran', 2, 6)).toEqual({ kind: 'quran' });
     expect(createPlaybackEndRule('surah', 2, 6)).toEqual({ kind: 'surah' });
   });
 
@@ -30,8 +31,9 @@ describe('playback end rules', () => {
     expect(shouldAdvanceAfterSurah(rule, 2)).toBe(false);
   });
 
-  it('does not advance past a stop-at-Surah rule but continuous playback does', () => {
+  it('does not advance past a stop-at-Surah rule but Quran-end playback does', () => {
     expect(shouldAdvanceAfterSurah({ kind: 'surah' }, 20)).toBe(false);
+    expect(shouldAdvanceAfterSurah({ kind: 'quran' }, 20)).toBe(true);
     expect(shouldAdvanceAfterSurah({ kind: 'continuous' }, 20)).toBe(true);
   });
 

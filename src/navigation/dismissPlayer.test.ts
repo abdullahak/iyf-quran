@@ -28,7 +28,7 @@ describe('dismissPlayer', () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 
-  it('returns to Listen when there is no navigation history', () => {
+  it('returns to Quran when there is no navigation history', () => {
     const router = {
       canDismiss: jest.fn(() => false),
       dismiss: jest.fn(),
@@ -37,6 +37,6 @@ describe('dismissPlayer', () => {
       replace: jest.fn(),
     };
     dismissPlayer(router);
-    expect(router.replace).toHaveBeenCalledWith('/(tabs)/listen');
+    expect(router.replace).toHaveBeenCalledWith('/(tabs)/quran');
   });
 });

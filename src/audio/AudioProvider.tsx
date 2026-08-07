@@ -16,13 +16,17 @@ import { useOfflineAudio } from '@/audio/OfflineAudioProvider';
 import {
   createPlaybackEndRule,
   createSleepTimerRule,
+  rebasePlaybackEndRule,
   shouldAdvanceAfterSurah,
   type PlaybackEndRule,
   type PlaybackScope,
 } from '@/audio/playbackEndRule';
 import type { PlaybackQueueEntry } from '@/audio/playbackLibrary';
+import { transitionQueuedPlayback } from '@/audio/playbackLibrary';
+import { usePlaybackLibrary } from '@/audio/PlaybackLibraryProvider';
 import {
   adjacentSurah,
+  ayahPlaybackStartTime,
   finishTransition,
   nextQueueIndex,
   queueEntryStartTime,
@@ -48,10 +52,12 @@ type QueueSession = {
   entries: readonly PlaybackQueueEntry[];
   generation: number;
   index: number;
+  kind: 'external' | 'library';
   reciterId: QuranReciter['id'];
 };
 
 type TransportTransition = {
+  acceptCurrentPosition?: boolean;
   confirmAfterStatusSequence: number;
   confirmBefore: number;
   generation: number;
@@ -79,6 +85,7 @@ type AudioContextValue = {
   playChapter: (chapter: Chapter) => Promise<void>;
   playFromAyah: (chapter: Chapter, ayah: number) => Promise<boolean>;
   playQueue: (entries: readonly PlaybackQueueEntry[], startIndex?: number) => Promise<boolean>;
+  playLibraryQueue: (startIndex?: number) => Promise<boolean>;
   clearPlaybackQueue: () => Promise<void>;
   nextChapter: () => Promise<void>;
   previousChapter: () => Promise<void>;
@@ -94,7 +101,8 @@ const AudioContext = createContext<AudioContextValue | null>(null);
 
 export function AudioProvider({ children }: { children: React.ReactNode }) {
   const { localUri } = useOfflineAudio();
-  const { settings } = useAppSettings();
+  const { queue: libraryQueue, replaceQueue } = usePlaybackLibrary();
+  const { language = 'en', settings } = useAppSettings();
   const selectedReciter = reciterById(settings.reciterId)!;
   const player = useAudioPlayer(null, {
     updateInterval: 200,
@@ -102,17 +110,20 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     keepAudioSessionActive: true,
   });
   const status = useAudioPlayerStatus(player);
+  const statusRef = useRef(status);
   const [chapter, setChapter] = useState<Chapter>();
   const [reciter, setReciter] = useState<QuranReciter>(selectedReciter);
   const [sourceKind, setSourceKind] = useState<'offline' | 'streaming'>();
   const [playbackRate, setPlaybackRateState] = useState<PlaybackRate>(DEFAULT_PLAYBACK_RATE);
   const [endRule, setEndRule] = useState<PlaybackEndRule>({ kind: 'continuous' });
   const [queueSession, setQueueSession] = useState<QueueSession>();
+  const [transportAnchorTime, setTransportAnchorTime] = useState<number>();
   const chapterRef = useRef(chapter);
   const reciterRef = useRef(reciter);
   const playbackRateRef = useRef(playbackRate);
   const endRuleRef = useRef(endRule);
   const queueSessionRef = useRef(queueSession);
+  const libraryQueueRef = useRef(libraryQueue);
   const finishHandledRef = useRef(false);
   const rangeHandledRef = useRef(false);
   const transportTransitionRef = useRef<TransportTransition | undefined>(undefined);
@@ -122,6 +133,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const transportGenerationRef = useRef(0);
   const statusSequenceRef = useRef(0);
   const lockScreenActiveRef = useRef(false);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    libraryQueueRef.current = libraryQueue;
+  }, [libraryQueue]);
 
   const ensureAudioMode = useCallback(async () => {
     if (Platform.OS === 'web') return;
@@ -159,6 +178,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     rangeHandledRef.current = false;
     if (!next && transportTransitionRef.current?.queueIndex !== undefined) {
       transportTransitionRef.current = undefined;
+      setTransportAnchorTime(undefined);
     }
     setQueueSession(next);
   }, []);
@@ -167,7 +187,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     startTime: number,
     confirmBefore: number,
     requirePlaying: boolean,
-    queue?: { entryId: string; generation?: number; index: number },
+    queue?: {
+      acceptCurrentPosition?: boolean;
+      entryId: string;
+      generation?: number;
+      index: number;
+    },
   ) => {
     const generation = transportGenerationRef.current + 1;
     transportGenerationRef.current = generation;
@@ -177,6 +202,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       generation,
       phase: 'positioning',
       ...(queue ? {
+        acceptCurrentPosition: queue.acceptCurrentPosition,
         queueEntryId: queue.entryId,
         queueGeneration: queue.generation ?? generation,
         queueIndex: queue.index,
@@ -184,12 +210,24 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       requirePlaying,
       startTime,
     };
+    setTransportAnchorTime(startTime);
     return generation;
   }, []);
 
   const confirmTransportTransition = useCallback((generation: number) => {
     const transition = transportTransitionRef.current;
     if (!transition || transition.generation !== generation) return false;
+    const sample = statusRef.current;
+    if (
+      transition.acceptCurrentPosition &&
+      !sample.didJustFinish &&
+      sample.currentTime >= transition.startTime - 0.25 &&
+      sample.currentTime < transition.confirmBefore - 0.05
+    ) {
+      transportTransitionRef.current = undefined;
+      setTransportAnchorTime(undefined);
+      return true;
+    }
     transportTransitionRef.current = {
       ...transition,
       confirmAfterStatusSequence: statusSequenceRef.current,
@@ -201,6 +239,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const clearTransportTransition = useCallback((generation: number) => {
     if (transportTransitionRef.current?.generation === generation) {
       transportTransitionRef.current = undefined;
+      setTransportAnchorTime(undefined);
     }
   }, []);
 
@@ -246,9 +285,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         : undefined;
       const nextSourceKind = downloadedUri ? 'offline' : 'streaming';
       const metadata = {
-        title: `Surah ${nextChapter.englishName}`,
-        artist: targetReciter.name,
-        albumTitle: 'Quran',
+        title: language === 'ar'
+          ? `سورة ${nextChapter.arabicName.replace(/^سُورَةُ\s*/, '')}`
+          : `Surah ${nextChapter.englishName}`,
+        artist: language === 'ar' ? targetReciter.arabicName : targetReciter.name,
+        albumTitle: language === 'ar' ? 'القرآن الكريم' : 'Quran',
         ...(targetReciter.artworkUrl ? { artworkUrl: targetReciter.artworkUrl } : {}),
       };
       const targetStartTime = startTime ?? (sourceChanged ? 0 : player.currentTime);
@@ -321,9 +362,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         if (currentChapter && Platform.OS !== 'web' && lockScreenActiveRef.current) {
           try {
             player.updateLockScreenMetadata({
-              title: `Surah ${currentChapter.englishName}`,
-              artist: currentReciter.name,
-              albumTitle: 'Quran',
+              title: language === 'ar'
+                ? `سورة ${currentChapter.arabicName.replace(/^سُورَةُ\s*/, '')}`
+                : `Surah ${currentChapter.englishName}`,
+              artist: language === 'ar' ? currentReciter.arabicName : currentReciter.name,
+              albumTitle: language === 'ar' ? 'القرآن الكريم' : 'Quran',
               ...(currentReciter.artworkUrl ? { artworkUrl: currentReciter.artworkUrl } : {}),
             });
           } catch {
@@ -334,7 +377,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
     },
-    [beginTransportTransition, clearTransportTransition, confirmTransportTransition, ensureAudioMode, localUri, player, publishSourceIdentity, selectedReciter, updateEndRule, updateQueueSession],
+    [beginTransportTransition, clearTransportTransition, confirmTransportTransition, ensureAudioMode, language, localUri, player, publishSourceIdentity, selectedReciter, updateEndRule, updateQueueSession],
   );
 
   const enqueueAction = useCallback((action: () => Promise<void>): Promise<void> => {
@@ -344,15 +387,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const playChapter = useCallback(
     (nextChapter: Chapter) => enqueueAction(async () => {
       updateQueueSession(undefined);
-      await startChapter(nextChapter);
+      await startChapter(nextChapter, selectedReciter, undefined, () => {
+        updateEndRule(rebasePlaybackEndRule(endRuleRef.current, nextChapter.number, 1));
+      });
     }),
-    [enqueueAction, startChapter, updateQueueSession],
+    [enqueueAction, selectedReciter, startChapter, updateEndRule, updateQueueSession],
   );
 
   const startQueueIndex = useCallback(async (
     entries: readonly PlaybackQueueEntry[],
     index: number,
     targetReciter: QuranReciter,
+    kind: QueueSession['kind'] = 'external',
   ): Promise<boolean> => {
     const entry = entries[index];
     const nextChapter = entry ? chapterByNumber(entry.surah) : undefined;
@@ -364,7 +410,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (!wholeSurah && !entryTimings) return false;
     const startTiming = entryTimings?.find((timing) => timing.ayah === entry.startAyah);
     const endTiming = entryTimings?.find((timing) => timing.ayah === entry.endAyah);
-    const startTime = queueEntryStartTime(entry, nextChapter.ayahCount, startTiming?.start);
+    const startTime = queueEntryStartTime(entry, startTiming?.start);
     if (startTime === undefined || (!wholeSurah && !endTiming)) return false;
 
     const generation = beginTransportTransition(
@@ -374,11 +420,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         startTime + QUEUE_START_CONFIRMATION_WINDOW_SECONDS,
       ),
       true,
-      { entryId: entry.id, index },
+      { acceptCurrentPosition: startTime > 0, entryId: entry.id, index },
     );
     const started = await startChapter(nextChapter, targetReciter, startTime, () => {
-      updateQueueSession({ entries, generation, index, reciterId: targetReciter.id });
-      updateEndRule({ kind: 'continuous' });
+      updateQueueSession({ entries, generation, index, kind, reciterId: targetReciter.id });
+      if (endRuleRef.current.kind !== 'timer') updateEndRule({ kind: 'continuous' });
     }, generation);
     return started;
   }, [beginTransportTransition, startChapter, updateEndRule, updateQueueSession]);
@@ -390,12 +436,15 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         ? SYNCHRONIZED_TIMINGS[nextChapter.number]
         : undefined;
       const timing = chapterTimings?.find((candidate) => candidate.ayah === ayah);
-      if (ayah !== 1 && !timing) return;
+      const startTime = ayahPlaybackStartTime(ayah, timing?.start);
+      if (startTime === undefined) return;
       updateQueueSession(undefined);
-      started = await startChapter(nextChapter, selectedReciter, timing?.start ?? 0);
+      started = await startChapter(nextChapter, selectedReciter, startTime, () => {
+        updateEndRule({ kind: 'surah' });
+      });
     });
     return started;
-  }, [enqueueAction, selectedReciter, startChapter, updateQueueSession]);
+  }, [enqueueAction, selectedReciter, startChapter, updateEndRule, updateQueueSession]);
 
   const playQueue = useCallback(async (
     entries: readonly PlaybackQueueEntry[],
@@ -408,6 +457,26 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     return started;
   }, [enqueueAction, selectedReciter, startQueueIndex]);
 
+  const startPendingLibraryQueue = useCallback(async (
+    targetReciter: QuranReciter,
+    startIndex = 0,
+  ) => {
+    const pending = libraryQueueRef.current.slice(startIndex);
+    const transition = transitionQueuedPlayback(pending, { type: 'current-finished' });
+    if (transition.action !== 'play') return false;
+    const started = await startQueueIndex(transition.queue, 0, targetReciter, 'library');
+    if (started) replaceQueue(transition.queue);
+    return started;
+  }, [replaceQueue, startQueueIndex]);
+
+  const playLibraryQueue = useCallback(async (startIndex = 0) => {
+    let started = false;
+    await enqueueAction(async () => {
+      started = await startPendingLibraryQueue(selectedReciter, startIndex);
+    });
+    return started;
+  }, [enqueueAction, selectedReciter, startPendingLibraryQueue]);
+
   const clearPlaybackQueue = useCallback(() => enqueueAction(async () => {
     updateQueueSession(undefined);
     updateEndRule({ kind: 'surah' });
@@ -416,52 +485,74 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const advanceQueue = useCallback((expectedGeneration: number) => enqueueAction(async () => {
     const session = queueSessionRef.current;
     if (!session || session.generation !== expectedGeneration) return;
-    const nextIndex = nextQueueIndex(session.entries.length, session.index, 1);
-    if (nextIndex === undefined) {
+    const sessionReciter = reciterById(session.reciterId);
+    if (session.kind === 'library') {
+      const completedEntry = session.entries[session.index];
+      if (!completedEntry) return;
+      const transition = transitionQueuedPlayback(libraryQueueRef.current, {
+        type: 'entry-finished',
+        entryId: completedEntry.id,
+      });
+      replaceQueue(transition.queue);
+      const started = transition.action === 'play' && sessionReciter
+        ? await startQueueIndex(transition.queue, 0, sessionReciter, 'library')
+        : false;
+      if (started) return;
       player.pause();
       updateQueueSession(undefined);
       return;
     }
-    const sessionReciter = reciterById(session.reciterId);
-    const started = sessionReciter
-      ? await startQueueIndex(session.entries, nextIndex, sessionReciter)
-      : false;
-    if (!started) {
-      player.pause();
-      updateQueueSession(undefined);
+    const nextIndex = nextQueueIndex(session.entries.length, session.index, 1);
+    if (nextIndex !== undefined) {
+      const started = sessionReciter
+        ? await startQueueIndex(session.entries, nextIndex, sessionReciter)
+        : false;
+      if (started) return;
+    } else if (await startPendingLibraryQueue(selectedReciter)) {
+      return;
     }
-  }), [enqueueAction, player, startQueueIndex, updateQueueSession]);
+    player.pause();
+    updateQueueSession(undefined);
+  }), [enqueueAction, player, replaceQueue, selectedReciter, startPendingLibraryQueue, startQueueIndex, updateQueueSession]);
 
   const moveChapter = useCallback((direction: -1 | 1) => enqueueAction(async () => {
     const session = queueSessionRef.current;
     if (session) {
       const nextIndex = nextQueueIndex(session.entries.length, session.index, direction);
-      if (nextIndex === undefined) return;
-      const sessionReciter = reciterById(session.reciterId);
-      const started = sessionReciter
-        ? await startQueueIndex(session.entries, nextIndex, sessionReciter)
-        : false;
-      if (!started) {
-        player.pause();
-        updateQueueSession(undefined);
+      if (nextIndex !== undefined) {
+        const sessionReciter = reciterById(session.reciterId);
+        const started = sessionReciter
+          ? await startQueueIndex(session.entries, nextIndex, sessionReciter)
+          : false;
+        if (!started) {
+          player.pause();
+          updateQueueSession(undefined);
+        }
+        return;
       }
-      return;
+      updateQueueSession(undefined);
     }
     const current = chapterRef.current;
     if (!current) return;
     const number = adjacentSurah(current.number, direction);
     const next = number ? chapterByNumber(number) : undefined;
-    if (next) await startChapter(next, reciterRef.current);
+    if (next) {
+      await startChapter(next, reciterRef.current);
+    } else if (direction === -1) {
+      await startChapter(current, reciterRef.current, 0);
+    }
   }), [enqueueAction, player, startChapter, startQueueIndex, updateQueueSession]);
 
   const nextChapter = useCallback(() => moveChapter(1), [moveChapter]);
   const previousChapter = useCallback(() => moveChapter(-1), [moveChapter]);
   const canPlayNext = queueSession
     ? nextQueueIndex(queueSession.entries.length, queueSession.index, 1) !== undefined
+      || Boolean(chapter && adjacentSurah(chapter.number, 1))
     : Boolean(chapter && adjacentSurah(chapter.number, 1));
   const canPlayPrevious = queueSession
     ? nextQueueIndex(queueSession.entries.length, queueSession.index, -1) !== undefined
-    : Boolean(chapter && adjacentSurah(chapter.number, -1));
+      || Boolean(chapter)
+    : Boolean(chapter);
 
   const toggle = useCallback(() => enqueueAction(async () => {
     if (!chapterRef.current) return;
@@ -504,7 +595,17 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (
       !pending ||
       pending.phase !== 'confirming' ||
-      statusSequenceRef.current <= pending.confirmAfterStatusSequence ||
+      statusSequenceRef.current <= pending.confirmAfterStatusSequence
+    ) return;
+    // A fresh completion is valid for ordinary playback, even when a very short
+    // track never emitted a separate near-start status. Queue transitions keep
+    // the stricter barrier so a previous entry's completion cannot skip a range.
+    if (pending.queueIndex === undefined && status.didJustFinish) {
+      transportTransitionRef.current = undefined;
+      setTransportAnchorTime(undefined);
+      return;
+    }
+    if (
       (pending.queueIndex !== undefined && (
         entry?.id !== pending.queueEntryId ||
         queueSession?.generation !== pending.queueGeneration ||
@@ -516,6 +617,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       status.currentTime >= pending.confirmBefore - 0.05
     ) return;
     transportTransitionRef.current = undefined;
+    setTransportAnchorTime(undefined);
   }, [queueSession, status.currentTime, status.didJustFinish, status.playing]);
 
   useEffect(() => {
@@ -528,18 +630,26 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       void advanceQueue(session.generation);
       return;
     }
+    const queued = transitionQueuedPlayback(libraryQueueRef.current, { type: 'current-finished' });
+    if (queued.action === 'play') {
+      void playLibraryQueue();
+      return;
+    }
     if (shouldAdvanceAfterSurah(endRuleRef.current, chapter.number)) {
       void nextChapter();
       return;
     }
     player.pause();
     updateEndRule({ kind: 'continuous' });
-  }, [advanceQueue, chapter, nextChapter, player, status.didJustFinish, updateEndRule]);
+  }, [advanceQueue, chapter, nextChapter, playLibraryQueue, player, status.didJustFinish, updateEndRule]);
 
   const timings = chapter && reciter.supportsTimings
     ? SYNCHRONIZED_TIMINGS[chapter.number]
     : undefined;
-  const activeAyah = activeAyahAt(timings, status.currentTime);
+  const activeAyah = activeAyahAt(
+    timings,
+    transportAnchorTime ?? status.currentTime,
+  );
 
   useEffect(() => {
     const session = queueSession;
@@ -667,12 +777,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         ? SYNCHRONIZED_TIMINGS[currentChapter.number]
         : undefined;
       const timing = currentTimings?.find((candidate) => candidate.ayah === ayah);
-      if (!timing) return;
+      const startTime = ayahPlaybackStartTime(ayah, timing?.start);
+      if (startTime === undefined) return;
       const session = queueSessionRef.current;
       const entry = session?.entries[session.index];
       const generation = beginTransportTransition(
-        timing.start,
-        timing.start + QUEUE_START_CONFIRMATION_WINDOW_SECONDS,
+        startTime,
+        startTime + QUEUE_START_CONFIRMATION_WINDOW_SECONDS,
         true,
         session && entry
           ? { entryId: entry.id, generation: session.generation, index: session.index }
@@ -681,7 +792,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       try {
         await ensureAudioMode();
         player.pause();
-        await player.seekTo(timing.start, 50, 50);
+        await player.seekTo(startTime, 50, 50);
         if (!confirmTransportTransition(generation)) return;
         player.play();
       } catch {
@@ -709,6 +820,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       playChapter,
       playFromAyah,
       playQueue,
+      playLibraryQueue,
       clearPlaybackQueue,
       nextChapter,
       previousChapter,
@@ -719,7 +831,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setPlaybackScope,
       setSleepTimer,
     }),
-    [activeAyah, canPlayNext, canPlayPrevious, chapter, clearPlaybackQueue, endRule, nextChapter, playbackRate, playChapter, playFromAyah, playQueue, previousChapter, queueSession, reciter, seekTo, seekToAyah, setPlaybackRate, setPlaybackScope, setSleepTimer, sourceKind, status, timings, toggle],
+    [activeAyah, canPlayNext, canPlayPrevious, chapter, clearPlaybackQueue, endRule, nextChapter, playbackRate, playChapter, playFromAyah, playLibraryQueue, playQueue, previousChapter, queueSession, reciter, seekTo, seekToAyah, setPlaybackRate, setPlaybackScope, setSleepTimer, sourceKind, status, timings, toggle],
   );
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;

@@ -38,9 +38,9 @@ describe('recitation playback queue', () => {
   });
 
   it('establishes a queue entry start even when the source is already loaded', () => {
-    expect(queueEntryStartTime({ startAyah: 1, endAyah: 7 }, 7)).toBe(0);
-    expect(queueEntryStartTime({ startAyah: 1, endAyah: 2 }, 7, 3.25)).toBe(3.25);
-    expect(queueEntryStartTime({ startAyah: 2, endAyah: 2 }, 7, 8.5)).toBe(8.5);
-    expect(queueEntryStartTime({ startAyah: 2, endAyah: 2 }, 7)).toBeUndefined();
+    expect(queueEntryStartTime({ startAyah: 1, endAyah: 7 })).toBe(0);
+    expect(queueEntryStartTime({ startAyah: 1, endAyah: 2 }, 3.25)).toBe(0);
+    expect(queueEntryStartTime({ startAyah: 2, endAyah: 2 }, 8.5)).toBe(8.5);
+    expect(queueEntryStartTime({ startAyah: 2, endAyah: 2 })).toBeUndefined();
   });
 });

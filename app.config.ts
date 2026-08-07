@@ -6,7 +6,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: 'iyf-quran',
   owner: 'abdlh',
   version: '0.1.0',
-  orientation: 'portrait',
+  orientation: 'default',
   icon: './assets/images/icon.png',
   scheme: 'iyfquran',
   userInterfaceStyle: 'automatic',
@@ -35,6 +35,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     'expo-router',
     'expo-dev-client',
+    'expo-localization',
     [
       'expo-audio',
       {

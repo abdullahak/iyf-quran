@@ -35,4 +35,24 @@ describe('PlaybackLibraryProvider', () => {
       JSON.stringify({ queue: [], playlists: [created!] }),
     ));
   });
+
+  it('publishes and then clears a transient enqueue confirmation', async () => {
+    jest.useFakeTimers();
+    try {
+      const { result } = await renderHook(() => usePlaybackLibrary(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.ready).toBe(true));
+
+      await act(() => {
+        result.current.enqueueRange(2, 8, 10);
+      });
+      expect(result.current.enqueueConfirmation).toMatchObject({
+        surah: 2, startAyah: 8, endAyah: 10,
+      });
+
+      await act(() => jest.advanceTimersByTime(2500));
+      expect(result.current.enqueueConfirmation).toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

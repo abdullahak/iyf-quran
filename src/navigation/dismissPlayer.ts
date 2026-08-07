@@ -3,7 +3,7 @@ type DismissibleRouter = {
   dismiss: () => void;
   canGoBack: () => boolean;
   back: () => void;
-  replace: (href: '/(tabs)/listen') => void;
+  replace: (href: '/(tabs)/quran') => void;
 };
 
 export function dismissPlayer(router: DismissibleRouter): void {
@@ -15,5 +15,5 @@ export function dismissPlayer(router: DismissibleRouter): void {
     router.back();
     return;
   }
-  router.replace('/(tabs)/listen');
+  router.replace('/(tabs)/quran');
 }

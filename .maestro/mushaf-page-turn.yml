@@ -1,0 +1,74 @@
+appId: com.abdlh.iyfquran
+name: Physical Mushaf page turns and vertical protection
+---
+- launchApp:
+    clearState: true
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible: 'Settings|الإعدادات'
+    timeout: 20000
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      text: '^Classic Medina,.*|^مصحف المدينة الكلاسيكي,.*'
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    text: '^Classic Medina,.*|^مصحف المدينة الكلاسيكي,.*'
+- tapOn:
+    id: tab-quran
+- extendedWaitUntil:
+    visible: '114 Surahs|١١٤ سورة'
+    timeout: 10000
+- tapOn:
+    text: '^Page$|^صفحة$'
+- assertVisible: 'Open a Medina page|فتح صفحة من المصحف'
+- tapOn:
+    text: '^Open page$|^فتح الصفحة$'
+- extendedWaitUntil:
+    visible: '^Page 1$|^الصفحة ١$'
+    timeout: 10000
+- takeScreenshot: mushaf-page-1-portrait
+- swipe:
+    from:
+      id: mushaf-page-turn-surface
+    direction: RIGHT
+    duration: 500
+    waitToSettleTimeoutMs: 2000
+- extendedWaitUntil:
+    visible: '^Page 2$|^الصفحة ٢$'
+    timeout: 10000
+- takeScreenshot: mushaf-page-2-portrait
+- swipe:
+    from:
+      id: mushaf-page-turn-surface
+    direction: UP
+    duration: 500
+    waitToSettleTimeoutMs: 1000
+- assertVisible: '^Page 2$|^الصفحة ٢$'
+- swipe:
+    from:
+      id: mushaf-page-turn-surface
+    direction: LEFT
+    duration: 500
+    waitToSettleTimeoutMs: 2000
+- extendedWaitUntil:
+    visible: '^Page 1$|^الصفحة ١$'
+    timeout: 10000
+- takeScreenshot: mushaf-page-1-after-left-swipe
+- setOrientation: LANDSCAPE_LEFT
+- extendedWaitUntil:
+    visible: '^Page 1$|^الصفحة ١$'
+    timeout: 10000
+- swipe:
+    from:
+      id: mushaf-page-turn-surface
+    direction: RIGHT
+    duration: 500
+    waitToSettleTimeoutMs: 2000
+- extendedWaitUntil:
+    visible: '^Page 2$|^الصفحة ٢$'
+    timeout: 10000
+- takeScreenshot: mushaf-page-2-landscape
+- setOrientation: PORTRAIT

@@ -11,6 +11,8 @@ import {
 import { useColorScheme } from 'react-native';
 
 import type { ReciterId } from '@/audio/reciter';
+import { resolveLanguage, type AppLanguage, type LanguageChoice } from '@/i18n/i18n';
+import { getSystemLanguageTag } from '@/i18n/systemLocale';
 import {
   APP_SETTINGS_STORAGE_KEY,
   DEFAULT_APP_SETTINGS,
@@ -26,7 +28,10 @@ type AppSettingsContextValue = {
   settings: AppSettings;
   ready: boolean;
   colorScheme: ResolvedColorScheme;
+  language: AppLanguage;
+  isRTL: boolean;
   setAppearance: (appearance: AppearanceMode) => void;
+  setLanguage: (language: LanguageChoice) => void;
   setReaderMode: (readerMode: ReaderMode) => void;
   setReciterId: (reciterId: ReciterId) => void;
 };
@@ -66,6 +71,9 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
   const setAppearance = useCallback((appearance: AppearanceMode) => {
     setSettings((current) => ({ ...current, appearance }));
   }, []);
+  const setLanguage = useCallback((language: LanguageChoice) => {
+    setSettings((current) => ({ ...current, language }));
+  }, []);
   const setReaderMode = useCallback((readerMode: ReaderMode) => {
     setSettings((current) => ({ ...current, readerMode }));
   }, []);
@@ -73,14 +81,18 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     setSettings((current) => ({ ...current, reciterId }));
   }, []);
 
+  const language = resolveLanguage(settings.language, getSystemLanguageTag());
   const value = useMemo<AppSettingsContextValue>(() => ({
     settings,
     ready,
     colorScheme: resolveColorScheme(settings.appearance, systemScheme),
+    language,
+    isRTL: language === 'ar',
     setAppearance,
+    setLanguage,
     setReaderMode,
     setReciterId,
-  }), [ready, setAppearance, setReaderMode, setReciterId, settings, systemScheme]);
+  }), [language, ready, setAppearance, setLanguage, setReaderMode, setReciterId, settings, systemScheme]);
 
   return <AppSettingsContext.Provider value={value}>{children}</AppSettingsContext.Provider>;
 }

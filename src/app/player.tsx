@@ -22,10 +22,15 @@ import { formatPlaybackTime } from '@/audio/playbackQueue';
 import { nextPlaybackRate } from '@/audio/playbackRate';
 import { AppSymbol } from '@/components/AppSymbol';
 import { dismissPlayer } from '@/navigation/dismissPlayer';
+import { useI18n } from '@/i18n/useI18n';
+import { readingRouteForPosition } from '@/reader/readingRoute';
+import { useAppSettings } from '@/settings/AppSettingsProvider';
 import { useAppPalette } from '@/theme/useAppPalette';
 
 export default function PlayerScreen() {
   const colors = useAppPalette();
+  const { isRTL, language, number: localizedNumber, t, tCount } = useI18n();
+  const { settings: { readerMode } } = useAppSettings();
   const router = useRouter();
   const { height, width } = useWindowDimensions();
   const [progressWidth, setProgressWidth] = useState(1);
@@ -55,12 +60,15 @@ export default function PlayerScreen() {
 
   if (!chapter) {
     return (
-      <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        edges={['top', 'right', 'bottom', 'left']}
+        style={[styles.safe, { backgroundColor: colors.background }]}
+      >
         <View style={styles.empty}>
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>Nothing playing</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('player.nothing')}</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close player"
+            accessibilityLabel={t('player.close')}
             onPress={closePlayer}
             style={[styles.closeButton, { backgroundColor: colors.surfaceMuted }]}
           >
@@ -85,17 +93,20 @@ export default function PlayerScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      edges={['top', 'right', 'bottom', 'left']}
+      style={[styles.safe, { backgroundColor: colors.background }]}
+    >
       <View style={styles.topBar}>
         <Pressable
           onPress={closePlayer}
           accessibilityRole="button"
-          accessibilityLabel="Close player"
+          accessibilityLabel={t('player.close')}
           style={({ pressed }) => [styles.closeButton, { backgroundColor: colors.surfaceMuted, opacity: pressed ? 0.6 : 1 }]}
         >
           <AppSymbol name="close" tintColor={colors.text} size={17} weight="semibold" />
         </Pressable>
-        <Text style={[styles.nowPlaying, { color: colors.textMuted }]}>NOW PLAYING</Text>
+        <Text style={[styles.nowPlaying, { color: colors.textMuted }]}>{t('player.nowPlaying')}</Text>
         <View style={styles.closeButton} />
       </View>
 
@@ -116,7 +127,7 @@ export default function PlayerScreen() {
               {chapter.arabicName.replace(/^سُورَةُ\s*/, '')}
             </Text>
             <View style={[styles.artworkRule, { backgroundColor: colors.primary }]} />
-            <Text style={[styles.artworkNumber, { color: colors.primary }]}>SURAH {chapter.number}</Text>
+            <Text style={[styles.artworkNumber, { color: colors.primary }]}>{t('player.surahNumber', { number: localizedNumber(chapter.number) })}</Text>
           </View>
         </View>
 
@@ -127,18 +138,18 @@ export default function PlayerScreen() {
           <Text style={[styles.englishTitle, { color: colors.text }]}>{chapter.englishName}</Text>
           <Text style={[styles.reciter, { color: colors.textMuted }]}>{reciter.name}</Text>
           {activeAyah ? (
-            <Text style={[styles.syncStatus, { color: colors.primary }]}>Ayah {activeAyah}</Text>
+            <Text style={[styles.syncStatus, { color: colors.primary }]}>{t('player.ayah', { number: localizedNumber(activeAyah) })}</Text>
           ) : null}
         </View>
 
         <View style={styles.timeline}>
           <Pressable
             accessibilityRole="adjustable"
-            accessibilityLabel="Recitation position"
+            accessibilityLabel={t('player.position')}
             accessibilityValue={{ min: 0, max: Math.round(status.duration), now: Math.round(status.currentTime) }}
             accessibilityActions={[
-              { name: 'increment', label: 'Forward 15 seconds' },
-              { name: 'decrement', label: 'Back 15 seconds' },
+              { name: 'increment', label: t('player.forward15') },
+              { name: 'decrement', label: t('player.back15') },
             ]}
             onAccessibilityAction={({ nativeEvent: { actionName } }) => {
               const delta = actionName === 'increment' ? 15 : actionName === 'decrement' ? -15 : 0;
@@ -159,7 +170,7 @@ export default function PlayerScreen() {
         <View style={styles.controls}>
           <PlayerControl
             disabled={!canPlayPrevious}
-            label="Previous Surah"
+            label={t('player.previous')}
             onPress={previousChapter}
             icon="previous"
             colors={colors}
@@ -170,7 +181,7 @@ export default function PlayerScreen() {
               toggle();
             }}
             accessibilityRole="button"
-            accessibilityLabel={status.playing ? 'Pause recitation' : 'Play recitation'}
+            accessibilityLabel={status.playing ? t('player.pause') : t('player.play')}
             style={({ pressed }) => [
               styles.primaryControl,
               { backgroundColor: colors.primary, opacity: pressed ? 0.72 : 1 },
@@ -180,7 +191,7 @@ export default function PlayerScreen() {
           </Pressable>
           <PlayerControl
             disabled={!canPlayNext}
-            label="Next Surah"
+            label={t('player.next')}
             onPress={nextChapter}
             icon="next"
             colors={colors}
@@ -190,14 +201,14 @@ export default function PlayerScreen() {
         <View style={[styles.listeningPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.speedRow}>
             <View>
-              <Text style={[styles.controlTitle, { color: colors.text }]}>Playback speed</Text>
-              <Text style={[styles.controlSubtitle, { color: colors.textMuted }]}>Pitch-corrected recitation</Text>
+              <Text style={[styles.controlTitle, { color: colors.text }]}>{t('player.speed')}</Text>
+              <Text style={[styles.controlSubtitle, { color: colors.textMuted }]}>{t('player.pitchCorrected')}</Text>
             </View>
             <View style={[styles.stepper, { backgroundColor: colors.surfaceMuted }]}>
               <Pressable
                 disabled={playbackRate === 0.5}
                 accessibilityRole="button"
-                accessibilityLabel="Decrease playback speed"
+                accessibilityLabel={t('player.decreaseSpeed')}
                 onPress={() => setPlaybackRate(nextPlaybackRate(playbackRate, -1))}
                 style={styles.stepperButton}
               >
@@ -207,7 +218,7 @@ export default function PlayerScreen() {
               <Pressable
                 disabled={playbackRate === 2}
                 accessibilityRole="button"
-                accessibilityLabel="Increase playback speed"
+                accessibilityLabel={t('player.increaseSpeed')}
                 onPress={() => setPlaybackRate(nextPlaybackRate(playbackRate, 1))}
                 style={styles.stepperButton}
               >
@@ -217,11 +228,16 @@ export default function PlayerScreen() {
           </View>
 
           <View style={[styles.panelDivider, { backgroundColor: colors.border }]} />
-          <Text style={[styles.controlTitle, { color: colors.text }]}>Play until</Text>
+          <Text style={[styles.controlTitle, { color: colors.text }]}>{t('player.playUntil')}</Text>
           <View style={styles.choiceRow}>
-            {(['continuous', 'page', 'juz', 'surah'] as const).map((scope) => {
+            {(['quran', 'page', 'juz', 'surah'] as const).map((scope) => {
               const selected = endRule.kind === scope;
-              const label = scope === 'continuous' ? 'Continuous' : scope === 'juz' ? 'Juz' : `${scope[0].toUpperCase()}${scope.slice(1)}`;
+              const label = {
+                quran: t('player.quranEnd'),
+                page: t('player.page'),
+                juz: t('player.juz'),
+                surah: t('player.surah'),
+              }[scope];
               return (
                 <Pressable
                   key={scope}
@@ -230,7 +246,7 @@ export default function PlayerScreen() {
                   aria-checked={selected}
                   onPress={async () => {
                     const applied = await setPlaybackScope(scope);
-                    setControlMessage(applied ? undefined : `${label} stopping requires synchronized recitation for this position.`);
+                    setControlMessage(applied ? undefined : t('player.synchronizedRequired'));
                   }}
                   style={[styles.choice, { backgroundColor: selected ? colors.primary : colors.surfaceMuted }]}
                 >
@@ -241,7 +257,7 @@ export default function PlayerScreen() {
           </View>
           {controlMessage ? <Text accessibilityLiveRegion="polite" style={[styles.controlMessage, { color: colors.textMuted }]}>{controlMessage}</Text> : null}
 
-          <Text style={[styles.timerLabel, { color: colors.textMuted }]}>Sleep timer</Text>
+          <Text style={[styles.timerLabel, { color: colors.textMuted }]}>{t('player.sleepTimer')}</Text>
           <View style={styles.choiceRow}>
             {[undefined, 15, 30, 45, 60].map((minutes) => {
               const selected = isSleepTimerSelected(endRule, minutes);
@@ -254,7 +270,7 @@ export default function PlayerScreen() {
                   onPress={() => { void setSleepTimer(minutes); }}
                   style={[styles.timerChoice, { backgroundColor: selected ? colors.primarySoft : colors.surfaceMuted }]}
                 >
-                  <Text style={[styles.timerChoiceText, { color: selected ? colors.primary : colors.textMuted }]}>{minutes ? `${minutes}m` : 'Off'}</Text>
+                  <Text style={[styles.timerChoiceText, { color: selected ? colors.primary : colors.textMuted }]}>{minutes ? t('player.minutes', { count: localizedNumber(minutes) }) : t('player.off')}</Text>
                 </Pressable>
               );
             })}
@@ -264,16 +280,19 @@ export default function PlayerScreen() {
         <View style={styles.actions}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Open Surah ${chapter.englishName} in the reader`}
-            onPress={() => router.push({ pathname: '/surah/[id]', params: { id: String(chapter.number) } })}
+            accessibilityLabel={t('player.openReaderLabel', { surah: language === 'ar' ? chapter.arabicName.replace(/^سُورَةُ\s*/, '') : chapter.englishName })}
+            onPress={() => {
+              const route = readingRouteForPosition(readerMode, chapter.number, activeAyah ?? 1);
+              if (route) router.dismissTo(route);
+            }}
             style={({ pressed }) => [styles.actionButton, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
           >
             <AppSymbol name="book" tintColor={colors.primary} size={18} />
-            <Text style={[styles.actionText, { color: colors.text }]}>Open reader</Text>
+            <Text style={[styles.actionText, { color: colors.text }]}>{t('player.openReader')}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Add Surah ${chapter.englishName} to queue`}
+            accessibilityLabel={t('player.addQueueLabel', { surah: language === 'ar' ? chapter.arabicName.replace(/^سُورَةُ\s*/, '') : chapter.englishName })}
             onPress={() => {
               enqueueRange(chapter.number);
               void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -281,11 +300,11 @@ export default function PlayerScreen() {
             style={({ pressed }) => [styles.actionButton, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
           >
             <AppSymbol name="queue" tintColor={colors.primary} size={18} />
-            <Text style={[styles.actionText, { color: colors.text }]}>Add to queue</Text>
+            <Text style={[styles.actionText, { color: colors.text }]}>{t('player.addQueue')}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Add Surah ${chapter.englishName} to playlist`}
+            accessibilityLabel={t('player.addPlaylistLabel', { surah: language === 'ar' ? chapter.arabicName.replace(/^سُورَةُ\s*/, '') : chapter.englishName })}
             onPress={() => router.push({
               pathname: '/add-to-playlist',
               params: { surah: String(chapter.number) },
@@ -293,27 +312,27 @@ export default function PlayerScreen() {
             style={({ pressed }) => [styles.actionButton, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
           >
             <AppSymbol name="more" tintColor={colors.primary} size={18} />
-            <Text style={[styles.actionText, { color: colors.text }]}>Add to playlist</Text>
+            <Text style={[styles.actionText, { color: colors.text }]}>{t('player.addPlaylist')}</Text>
           </Pressable>
           {queue.length > 0 ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Open queue with ${queue.length} items`}
+              accessibilityLabel={tCount(queue.length, 'player.openQueueOne', 'player.openQueue')}
               onPress={() => router.push('/queue')}
               style={({ pressed }) => [styles.actionButton, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
             >
-              <AppSymbol name="forward" tintColor={colors.primary} size={17} />
-              <Text style={[styles.actionText, { color: colors.text }]}>View queue · {queue.length}</Text>
+              <AppSymbol name={isRTL ? 'back' : 'forward'} tintColor={colors.primary} size={17} />
+              <Text style={[styles.actionText, { color: colors.text }]}>{t('player.viewQueue', { count: localizedNumber(queue.length) })}</Text>
             </Pressable>
           ) : null}
           {downloadsAvailable ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={downloadAction === 'cancel'
-                ? `Cancel download of Surah ${chapter.englishName}`
+                ? t('downloads.cancelLabel', { surah: language === 'ar' ? chapter.arabicName.replace(/^سُورَةُ\s*/, '') : chapter.englishName })
                 : downloadAction === 'remove'
-                  ? `Remove downloaded Surah ${chapter.englishName}`
-                  : `Download Surah ${chapter.englishName}`}
+                  ? t('downloads.removeLabel', { surah: language === 'ar' ? chapter.arabicName.replace(/^سُورَةُ\s*/, '') : chapter.englishName })
+                  : t('downloads.downloadLabel', { surah: language === 'ar' ? chapter.arabicName.replace(/^سُورَةُ\s*/, '') : chapter.englishName })}
               onPress={() => {
                 if (downloadAction === 'cancel') void cancelDownload(chapter.number);
                 else if (downloadAction === 'remove') void removeDownload(chapter.number);
@@ -328,10 +347,10 @@ export default function PlayerScreen() {
               />
               <Text style={[styles.actionText, { color: colors.text }]}>
                 {downloadAction === 'remove'
-                  ? `Downloaded · ${sourceKind === 'offline' ? 'playing offline' : 'ready next play'}`
+                  ? t(sourceKind === 'offline' ? 'downloads.downloadedOffline' : 'downloads.downloadedReady')
                   : downloadAction === 'cancel'
-                    ? `Cancel download · ${Math.round((downloadProgress ?? 0) * 100)}%`
-                    : 'Download Surah'}
+                    ? t('downloads.cancelProgress', { percent: localizedNumber(Math.round((downloadProgress ?? 0) * 100)) })
+                    : t('downloads.downloadSurah')}
               </Text>
             </Pressable>
           ) : null}

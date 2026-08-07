@@ -18,6 +18,7 @@ type PlaybackLibraryContextValue = {
   queue: readonly PlaybackQueueEntry[];
   playlists: readonly QuranPlaylist[];
   ready: boolean;
+  enqueueConfirmation: PlaybackQueueEntry | undefined;
   enqueueRange: (surah: number, startAyah?: number, endAyah?: number) => PlaybackQueueEntry;
   replaceQueue: (entries: readonly PlaybackQueueEntry[]) => void;
   removeFromQueue: (id: string) => void;
@@ -45,6 +46,7 @@ export function PlaybackLibraryProvider({ children }: { children: React.ReactNod
   const [queue, setQueue] = useState<PlaybackQueueEntry[]>([]);
   const [playlists, setPlaylists] = useState<QuranPlaylist[]>([]);
   const [ready, setReady] = useState(false);
+  const [enqueueConfirmation, setEnqueueConfirmation] = useState<PlaybackQueueEntry>();
   const persistenceQueueRef = useRef(Promise.resolve());
   const identityCounterRef = useRef(0);
 
@@ -80,9 +82,19 @@ export function PlaybackLibraryProvider({ children }: { children: React.ReactNod
     void write.catch(() => undefined);
   }, [playlists, queue, ready]);
 
+  useEffect(() => {
+    if (!enqueueConfirmation) return;
+    const confirmationId = enqueueConfirmation.id;
+    const timeout = setTimeout(() => {
+      setEnqueueConfirmation((current) => current?.id === confirmationId ? undefined : current);
+    }, 2500);
+    return () => clearTimeout(timeout);
+  }, [enqueueConfirmation]);
+
   const enqueueRange = useCallback((surah: number, startAyah?: number, endAyah?: number) => {
     const entry = createQueueEntry(surah, startAyah, endAyah, nextId('queue'));
     setQueue((current) => appendQueue(current, entry));
+    setEnqueueConfirmation(entry);
     return entry;
   }, [nextId]);
   const replaceQueue = useCallback((entries: readonly PlaybackQueueEntry[]) => setQueue([...entries]), []);
@@ -135,6 +147,7 @@ export function PlaybackLibraryProvider({ children }: { children: React.ReactNod
     queue,
     playlists,
     ready,
+    enqueueConfirmation,
     enqueueRange,
     replaceQueue,
     removeFromQueue,
@@ -150,6 +163,7 @@ export function PlaybackLibraryProvider({ children }: { children: React.ReactNod
     createPlaylist,
     createPlaylistWithRange,
     deletePlaylist,
+    enqueueConfirmation,
     enqueueRange,
     moveInQueue,
     playlists,

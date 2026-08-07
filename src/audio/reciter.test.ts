@@ -28,9 +28,10 @@ describe('Muhammad Al-Faqih recitation URLs', () => {
     ]);
     expect(reciterById('muhammad-al-faqih')).toMatchObject({
       arabicName: 'مُحَمَّد ٱلْفَقِيه',
-      supportsOffline: true,
+      supportsOffline: false,
       supportsTimings: true,
     });
+    expect(reciterById('muhammad-al-faqih')?.artworkUrl).toBeUndefined();
     expect(reciterById('mishary-alafasi')).toMatchObject({
       arabicName: 'مِشَارِي رَاشِد ٱلْعَفَاسِي',
       name: 'Mishary Alafasi',

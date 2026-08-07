@@ -2,11 +2,12 @@ import { chapterByNumber } from '@/data/chapters';
 import { JUZ_SECTIONS } from '@/data/juz';
 import { medinaPageForAyah } from '@/data/pages';
 
-export type PlaybackScope = 'continuous' | 'surah' | 'page' | 'juz';
+export type PlaybackScope = 'continuous' | 'quran' | 'surah' | 'page' | 'juz';
 export type QuranEndPosition = { surah: number; ayah: number };
 
 export type PlaybackEndRule =
   | { kind: 'continuous' }
+  | { kind: 'quran' }
   | { kind: 'surah' }
   | { kind: 'page'; page: number; end: QuranEndPosition }
   | { kind: 'juz'; juz: number; end: QuranEndPosition }
@@ -18,7 +19,7 @@ export function createPlaybackEndRule(
   ayah: number,
 ): PlaybackEndRule {
   assertQuranPosition(surah, ayah);
-  if (scope === 'continuous' || scope === 'surah') return { kind: scope };
+  if (scope === 'continuous' || scope === 'quran' || scope === 'surah') return { kind: scope };
   if (scope === 'page') {
     const page = medinaPageForAyah(surah, ayah);
     if (!page) throw new RangeError('Unknown Medina page position.');
@@ -47,6 +48,16 @@ export function createSleepTimerRule(
     durationMinutes,
     endsAt: now + durationMinutes * 60_000,
   };
+}
+
+export function rebasePlaybackEndRule(
+  rule: PlaybackEndRule,
+  surah: number,
+  ayah: number,
+): PlaybackEndRule {
+  return rule.kind === 'page' || rule.kind === 'juz'
+    ? createPlaybackEndRule(rule.kind, surah, ayah)
+    : rule;
 }
 
 export function isSleepTimerExpired(rule: PlaybackEndRule, now = Date.now()): boolean {

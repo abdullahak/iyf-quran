@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppSymbol } from '@/components/AppSymbol';
 import type { Chapter } from '@/data/chapters';
+import { useI18n } from '@/i18n/useI18n';
 import { useAppPalette } from '@/theme/useAppPalette';
 
 type Props = {
@@ -26,7 +27,14 @@ export function ChapterRow({
   trailing,
 }: Props) {
   const colors = useAppPalette();
+  const { language, number: localizedNumber, t } = useI18n();
   const router = useRouter();
+  const localizedName = language === 'ar'
+    ? chapter.arabicName.replace(/^سُورَةُ\s*/, '')
+    : chapter.englishName;
+  const actionLabel = playing
+    ? t('common.pause')
+    : t(action === 'play' ? 'common.play' : 'common.open');
   const handlePress =
     onPress ??
     (() => router.push({
@@ -45,7 +53,12 @@ export function ChapterRow({
           handlePress();
         }}
         accessibilityRole="button"
-        accessibilityLabel={`${playing ? 'Pause' : action === 'play' ? 'Play' : 'Open'} Surah ${chapter.englishName}, ${chapter.ayahCount} ayahs${subtitle ? `, ${subtitle}` : ''}`}
+        accessibilityLabel={t('chapterRow.label', {
+          action: actionLabel,
+          surah: localizedName,
+          count: localizedNumber(chapter.ayahCount),
+          subtitle: subtitle ? `${language === 'ar' ? '، ' : ', '}${subtitle}` : '',
+        })}
         accessibilityState={{ selected: playing }}
         style={({ pressed }) => [
           styles.row,
@@ -56,12 +69,15 @@ export function ChapterRow({
         ]}
       >
       <Text style={[styles.numberText, { color: colors.textFaint }]}>
-        {String(chapter.number).padStart(2, '0')}
+        {localizedNumber(chapter.number)}
       </Text>
       <View style={styles.english}>
         <Text style={[styles.title, { color: colors.text }]}>{chapter.englishName}</Text>
         <Text style={[styles.meta, { color: colors.textMuted }]}>
-          {subtitle ?? `Surah ${chapter.number} · ${chapter.ayahCount} ayahs`}
+          {subtitle ?? t('chapterRow.meta', {
+            number: localizedNumber(chapter.number),
+            count: localizedNumber(chapter.ayahCount),
+          })}
         </Text>
       </View>
       <Text
@@ -90,7 +106,7 @@ const styles = StyleSheet.create({
   shell: { flexDirection: 'row', alignItems: 'center' },
   row: {
     flex: 1,
-    minHeight: 76,
+    minHeight: 82,
     borderStartWidth: 2,
     flexDirection: 'row',
     alignItems: 'center',
@@ -115,7 +131,9 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     fontFamily: 'AmiriQuran_400Regular',
     fontSize: 25,
-    lineHeight: 38,
+    lineHeight: 42,
+    paddingTop: 4,
+    paddingBottom: 2,
   },
   play: {
     width: 44,

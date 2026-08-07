@@ -1,0 +1,11 @@
+appId: com.abdlh.iyfquran
+name: Launches the native app
+---
+- launchApp:
+    clearState: true
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible: 'Recent pages|الصفحات الأخيرة'
+    timeout: 20000
+- assertVisible: 'Quran|القرآن'
+- takeScreenshot: launch-home

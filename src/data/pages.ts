@@ -1,4 +1,5 @@
 import { chapterByNumber } from './chapters';
+import { juzForAyah } from './juz';
 
 export type QuranPosition = readonly [surah: number, ayah: number];
 
@@ -12,6 +13,11 @@ export type PageSurahSegment = {
   surah: number;
   startAyah: number;
   endAyah: number;
+};
+
+export type MedinaPageMetadata = {
+  surahNumbers: number[];
+  juzNumbers: number[];
 };
 
 // Generated from quran-meta/hafs v6.0.17 getPageMeta(). The 604
@@ -652,6 +658,22 @@ export function medinaPageSegments(page: number): PageSurahSegment[] {
       endAyah: surah === lastSurah ? lastAyah : chapter.ayahCount,
     };
   });
+}
+
+export function medinaPageMetadata(page: number): MedinaPageMetadata | undefined {
+  const segments = medinaPageSegments(page);
+  if (segments.length === 0) return undefined;
+  const juzNumbers = new Set<number>();
+  segments.forEach((segment) => {
+    for (let ayah = segment.startAyah; ayah <= segment.endAyah; ayah += 1) {
+      const juz = juzForAyah(segment.surah, ayah);
+      if (juz !== undefined) juzNumbers.add(juz);
+    }
+  });
+  return {
+    surahNumbers: segments.map((segment) => segment.surah),
+    juzNumbers: [...juzNumbers],
+  };
 }
 
 function comparePosition(left: QuranPosition, right: QuranPosition): number {

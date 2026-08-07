@@ -4,6 +4,7 @@ import {
   canStartOfflineDownload,
   claimOfflineDownloads,
   consumeCancelledDownloads,
+  formatOfflineAudioBytes,
   markOfflineCancellation,
   offlineAudioAction,
   offlineDownloadsAvailable,
@@ -11,6 +12,7 @@ import {
   parseOfflineAudioRecords,
   releaseOfflineDownloads,
   shouldDeletePromotedDownload,
+  summarizeOfflineAudio,
   type OfflineAudioRecord,
 } from './offlineAudio';
 
@@ -74,6 +76,39 @@ describe('offline recitation metadata', () => {
     expect(OFFLINE_AUDIO_STORAGE_KEY).toBe('quran:offline-audio:v3');
   });
 
+  it('summarizes downloaded Surahs in canonical order with their total storage', () => {
+    const first = recitationTrack({ number: 1 });
+    const second = recitationTrack({ number: 2 });
+    const firstRecord: OfflineAudioRecord = {
+      surah: 1,
+      uri: 'file:///cache/001.mp3',
+      bytes: first.bytes,
+      sha256: first.sha256,
+      downloadedAt: '2026-08-04T00:00:00.000Z',
+      verifiedAt: '2026-08-04T00:00:01.000Z',
+    };
+    const secondRecord: OfflineAudioRecord = {
+      surah: 2,
+      uri: 'file:///cache/002.mp3',
+      bytes: second.bytes,
+      sha256: second.sha256,
+      downloadedAt: '2026-08-04T00:00:02.000Z',
+      verifiedAt: '2026-08-04T00:00:03.000Z',
+    };
+
+    expect(summarizeOfflineAudio({ 2: secondRecord, 1: firstRecord })).toEqual({
+      count: 2,
+      surahs: [1, 2],
+      totalBytes: first.bytes + second.bytes,
+    });
+  });
+
+  it('formats storage totals without implying false byte precision', () => {
+    expect(formatOfflineAudioBytes(0)).toBe('0 MB');
+    expect(formatOfflineAudioBytes(3 * 1024 * 1024)).toBe('3 MB');
+    expect(formatOfflineAudioBytes(1.5 * 1024 * 1024 * 1024)).toBe('1.5 GB');
+  });
+
   const track = recitationTrack({ number: 1 });
   const record: OfflineAudioRecord = {
     surah: 1,
@@ -84,13 +119,9 @@ describe('offline recitation metadata', () => {
     verifiedAt: '2026-08-04T00:00:01.000Z',
   };
 
-  it('builds Raspberry Pi audio URLs using canonical padded filenames', () => {
-    expect(offlineAudioUrl(1)).toBe(
-      'https://abdlh.com/quran/audio/muhammad-al-faqih/001.mp3',
-    );
-    expect(offlineAudioUrl(114)).toBe(
-      'https://abdlh.com/quran/audio/muhammad-al-faqih/114.mp3',
-    );
+  it('fails new offline downloads closed until redistribution rights are confirmed', () => {
+    expect(() => offlineAudioUrl(1)).toThrow('Offline downloads are unavailable');
+    expect(() => offlineAudioUrl(114)).toThrow('Offline downloads are unavailable');
   });
 
   it('restores only records matching the exact typed track identity', () => {

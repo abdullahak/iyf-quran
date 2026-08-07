@@ -1,7 +1,8 @@
-import { recitationTrack } from './reciter';
+import {
+  MUHAMMAD_AL_FAQIH_OFFLINE_RIGHTS_CONFIRMED,
+  recitationTrack,
+} from './reciter';
 
-export const OFFLINE_AUDIO_BASE_URL =
-  'https://abdlh.com/quran/audio/muhammad-al-faqih';
 export const OFFLINE_AUDIO_STORAGE_KEY = 'quran:offline-audio:v3';
 
 export type OfflineAudioRecord = {
@@ -14,6 +15,35 @@ export type OfflineAudioRecord = {
 };
 
 export type OfflineAudioAction = 'cancel' | 'remove' | 'select';
+
+export type OfflineAudioSummary = {
+  count: number;
+  surahs: number[];
+  totalBytes: number;
+};
+
+export function summarizeOfflineAudio(
+  records: Readonly<Partial<Record<number, OfflineAudioRecord>>>,
+): OfflineAudioSummary {
+  const available = Object.values(records)
+    .filter((record): record is OfflineAudioRecord => Boolean(record))
+    .sort((left, right) => left.surah - right.surah);
+  return {
+    count: available.length,
+    surahs: available.map((record) => record.surah),
+    totalBytes: available.reduce((total, record) => total + record.bytes, 0),
+  };
+}
+
+export function formatOfflineAudioBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB';
+  const gigabyte = 1024 * 1024 * 1024;
+  const megabyte = 1024 * 1024;
+  const unit = bytes >= gigabyte ? 'GB' : 'MB';
+  const value = bytes / (unit === 'GB' ? gigabyte : megabyte);
+  const rounded = value.toFixed(value >= 10 ? 0 : 1).replace(/\.0$/, '');
+  return `${rounded} ${unit}`;
+}
 
 export function canStartOfflineDownload(selectedCount: number, batchActive: boolean): boolean {
   return selectedCount > 0 && !batchActive;
@@ -74,10 +104,11 @@ export function offlineAudioAction(
 }
 
 export function offlineAudioUrl(surah: number): string {
-  if (!Number.isInteger(surah) || surah < 1 || surah > 114) {
-    throw new RangeError('Surah number must be between 1 and 114.');
+  const track = recitationTrack({ number: surah });
+  if (!MUHAMMAD_AL_FAQIH_OFFLINE_RIGHTS_CONFIRMED) {
+    throw new Error('Offline downloads are unavailable until redistribution rights are confirmed.');
   }
-  return `${OFFLINE_AUDIO_BASE_URL}/${String(surah).padStart(3, '0')}.mp3`;
+  return track.sourceUrl;
 }
 
 export function parseOfflineAudioRecords(

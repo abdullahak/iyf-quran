@@ -19,13 +19,19 @@ export function nextQueueIndex(
   return candidate >= 0 && candidate < length ? candidate : undefined;
 }
 
-export function queueEntryStartTime(
-  entry: { startAyah: number; endAyah: number },
-  ayahCount: number,
+export function ayahPlaybackStartTime(
+  ayah: number,
   timingStart?: number,
 ): number | undefined {
-  if (entry.startAyah === 1 && entry.endAyah === ayahCount) return 0;
+  if (ayah === 1) return 0;
   return Number.isFinite(timingStart) ? timingStart : undefined;
+}
+
+export function queueEntryStartTime(
+  entry: { startAyah: number; endAyah: number },
+  timingStart?: number,
+): number | undefined {
+  return ayahPlaybackStartTime(entry.startAyah, timingStart);
 }
 
 export function formatPlaybackTime(value: number): string {

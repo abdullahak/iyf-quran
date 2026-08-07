@@ -1,0 +1,29 @@
+name: iOS Simulator Maestro
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build_ios_simulator:
+    name: Build iOS Simulator app
+    type: build
+    env:
+      EAS_NO_VCS: 1
+    params:
+      platform: ios
+      profile: e2e-test
+
+  maestro:
+    name: Run native reader flows
+    needs: [build_ios_simulator]
+    type: maestro
+    environment: preview
+    params:
+      build_id: ${{ needs.build_ios_simulator.outputs.build_id }}
+      flow_path:
+        - .maestro/launch.yml
+        - .maestro/player-accessory-clearance.yml
+        - .maestro/quran-audio-reader-integration.yml
+        - .maestro/mushaf-page-turn.yml
+        - .maestro/reading-mushaf-layout.yml
+      record_screen: true
