@@ -12,6 +12,8 @@ Improvements
 2. Let's add to the "Play Until" the option to go until End of Quran
 2. The Previous / Next buttons next to "Play" are grayed out. I want to be able to use them.
 2. When I click into "Open Reader" from within the audio player it shows me a temporary module, that's fine, but I want to click a button where I switch to the reader view and the text that's being read out loud becomes highlighted and keeps up with the audio. Think about the Kindle user interface for example. Audio and reading go hand in hand, they are not two separate flows.
-3. When I start a new surah let me play from the beginning, so if I select the first ayah of a surah it has to start from the very beginning of the surah, not just when that Ayah starts.
-4. When I open the reader view, select an ayah and click "Play" the highlight stays on the ayah I selected instead of continuing with the reading.
+3. When I start a new surah let me play from the beginning, so if I select the first ayah of a surah it has to start from the very beginning of the surah, not just when that Ayah starts. It misses the "Bismillah"
+4. When I open the reader view, select an ayah and click "Play" the highlight stays on the ayah I selected instead of continuing with the reading. You need to continuously highlight the ayah that's being recited and move with the audio.
+
+4. 
 
