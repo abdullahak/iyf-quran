@@ -2,18 +2,44 @@ Improvements
 
 1. The Quran is in Arabic, so it reads from Right to left, this mean: Swipe Left = going back in pages\
    Swipe Right = going front in pages
+
 2. You still didn't fix the height of the play banner when users are viewing it from the Home page, that's because the nav bar overlaps it.
+
 3. Reading Mushaf you did it poorly. I want it to view as much text as possible in a single view, not one ayah at a time. Also the swiping direction on it needs to be fixed. The way we had it before was much closer, just instead of having to scroll to the bottom of the page you can swipe to continue reading it. It's not that complicated. You mis-implemented this feature. You may need to revert to how it was before and use that as a starting point again.
 
 1. When audio is playing I'd like you to highlight the Ayah being recited even in the "Read" page. We need to better integrate the "Read" and "Listen capabilities, you're thinking of them too much as two separate use cases, we should actually merge them into a single page called "Quran". Where you select the Surah/Ayah, and you can choose to have it play or read it.
+
 2. The Navigation bar cuts into the Play banner. You fixed it when I'm in "Read" mode but not when I'm in the home, read, or listen pages. The entire Play banner needs to shift up above the Nav bar. The nav bar cuts into it.
+
 2. When playing from any Ayah it needs to default to continue until the end of the Surah.
+
 2. When the audio ends for a Surah it continues to the next Surah but the "Open Reader" view just stops at the current Surah
+
 2. Let's add to the "Play Until" the option to go until End of Quran
+
 2. The Previous / Next buttons next to "Play" are grayed out. I want to be able to use them.
+
 2. When I click into "Open Reader" from within the audio player it shows me a temporary module, that's fine, but I want to click a button where I switch to the reader view and the text that's being read out loud becomes highlighted and keeps up with the audio. Think about the Kindle user interface for example. Audio and reading go hand in hand, they are not two separate flows.
+
 3. When I start a new surah let me play from the beginning, so if I select the first ayah of a surah it has to start from the very beginning of the surah, not just when that Ayah starts. It misses the "Bismillah"
+
 4. When I open the reader view, select an ayah and click "Play" the highlight stays on the ayah I selected instead of continuing with the reading. You need to continuously highlight the ayah that's being recited and move with the audio.
 
 4. 
 
+
+
+
+Improvements\
+\
+1\. The Quran is in Arabic, so it reads from Right to left, this mean: Swipe Left = going back in pages\\\
+Swipe Right = going front in pages\
+2\. You still didn't fix the height of the play banner when users are viewing it from the Home page, that's because the nav bar overlaps it.\
+3\. Reading Mushaf you did it poorly. I want it to view as much text as possible in a single view, not one ayah at a time. Also the swiping direction on it needs to be fixed. The way we had it before was much closer, just instead of having to scroll to the bottom of the page you can swipe to continue reading it. It's not that complicated. You mis-implemented this feature. You may need to revert to how it was before and use that as a starting point again.\
+\
+1\. When audio is playing I'd like you to highlight the Ayah being recited even in the "Read" page. We need to better integrate the "Read" and "Listen capabilities, you're thinking of them too much as two separate use cases, we should actually merge them into a single page called "Quran". Where you select the Surah/Ayah, and you can choose to have it play or read it.\
+2\. When the audio ends for a Surah it continues to the next Surah but the "Open Reader" view just stops at the current Surah\
+2\. The Previous / Next buttons next to "Play" are grayed out on the lock screen. I want to be able to use them.\
+2\. When I click into "Open Reader" from within the audio player it shows me a temporary module. Instead it needs to navigate me to the Reading  that's fine, but I want to click a button where I switch to the reader view and the text that's being read out loud becomes highlighted and keeps up with the audio. Think about the Kindle user interface for example. Audio and reading go hand in hand, they are not two separate flows.\
+3\. When I start a new surah let me play from the beginning, so if I select the first ayah of a surah it has to star from the very beginning of the surah, not just when that Ayah starts.\
+4\. When I open the reader view, select an ayah and click "Play" the highlight stays on the ayah i selected instead of continuing with the reading
